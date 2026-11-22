@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /_error/
+Disallow: /editor
+Disallow: /projects
+Disallow: /project/
+
+Sitemap: https://vidslice.run.place/sitemap.xml
