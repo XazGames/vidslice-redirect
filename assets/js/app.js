@@ -213,6 +213,10 @@
     var pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     var current = { x: pointer.x, y: pointer.y };
     var dots = [];
+    var comets = [];
+    var nextComet = 600;
+    var lastPointerComet = 0;
+    var lastFrame = 0;
     var ctx = canvas ? canvas.getContext('2d') : null;
     var width = 0;
     var height = 0;
@@ -228,6 +232,7 @@
       }
       var count = Math.max(30, Math.min(90, Math.floor((width * height) / 22000)));
       dots = [];
+      comets = [];
       for (var i = 0; i < count; i++) {
         dots.push({
           x: Math.random() * width,
@@ -241,7 +246,34 @@
       draw(0);
     }
 
-    function draw(time) {
+    function spawnComet(time, x, y, dx, dy, fromPointer) {
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var ux = dx / len;
+      var uy = dy / len;
+      if (!fromPointer) {
+        var fromLeft = Math.random() < 0.5;
+        x = fromLeft ? -60 : width + 60;
+        y = Math.random() * height * 0.8;
+        ux = (fromLeft ? 1 : -1) * (0.75 + Math.random() * 0.2);
+        uy = 0.35 + Math.random() * 0.3;
+        len = Math.sqrt(ux * ux + uy * uy);
+        ux /= len;
+        uy /= len;
+      }
+      var speed = fromPointer ? 0.28 + Math.random() * 0.22 : 0.22 + Math.random() * 0.16;
+      comets.push({
+        x: x,
+        y: y,
+        vx: ux * speed,
+        vy: uy * speed,
+        age: 0,
+        ttl: fromPointer ? 900 + Math.random() * 500 : 1700 + Math.random() * 900,
+        tail: 50 + Math.random() * 70,
+        w: 1.1 + Math.random() * 1.3
+      });
+    }
+
+    function draw(time, dt) {
       if (!ctx) return;
       ctx.clearRect(0, 0, width, height);
       for (var i = 0; i < dots.length; i++) {
@@ -259,20 +291,72 @@
         ctx.fillStyle = 'rgba(' + dotColor + ',' + (0.18 + force * 0.55) + ')';
         ctx.fill();
       }
+
+      if (dt) {
+        if (time > nextComet) {
+          if (comets.length < 6) spawnComet(time, 0, 0, 1, 0, false);
+          nextComet = time + 900 + Math.random() * 1400;
+        }
+        for (var c = comets.length - 1; c >= 0; c--) {
+          var comet = comets[c];
+          comet.age += dt;
+          comet.x += comet.vx * dt;
+          comet.y += comet.vy * dt;
+          if (comet.age >= comet.ttl || comet.x < -220 || comet.x > width + 220 || comet.y < -220 || comet.y > height + 220) {
+            comets.splice(c, 1);
+          }
+        }
+      }
+
+      for (var j = 0; j < comets.length; j++) {
+        var k = comets[j];
+        var alpha = Math.min(1, k.age / 180, (k.ttl - k.age) / 500);
+        if (alpha <= 0) continue;
+        var sp = Math.sqrt(k.vx * k.vx + k.vy * k.vy) || 1;
+        var tx = k.x - (k.vx / sp) * k.tail;
+        var ty = k.y - (k.vy / sp) * k.tail;
+        var grad = ctx.createLinearGradient(tx, ty, k.x, k.y);
+        grad.addColorStop(0, 'rgba(' + dotColor + ',0)');
+        grad.addColorStop(0.65, 'rgba(' + dotColor + ',' + (0.1 * alpha) + ')');
+        grad.addColorStop(1, 'rgba(' + dotColor + ',' + (0.85 * alpha) + ')');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = k.w;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(k.x, k.y);
+        ctx.stroke();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(' + dotColor + ',' + (0.5 * alpha) + ')';
+        ctx.beginPath();
+        ctx.arc(k.x, k.y, k.w * 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(' + dotColor + ',' + (0.9 * alpha) + ')';
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
     }
 
     function frame(time) {
+      var dt = lastFrame ? Math.min(time - lastFrame, 50) : 16;
+      lastFrame = time;
       current.x += (pointer.x - current.x) * 0.12;
       current.y += (pointer.y - current.y) * 0.12;
       if (glow) glow.style.transform = 'translate3d(' + current.x + 'px,' + current.y + 'px,0)';
-      draw(time);
+      draw(time, dt);
       requestAnimationFrame(frame);
     }
 
     window.addEventListener('pointermove', function (event) {
+      var dx = event.clientX - pointer.x;
+      var dy = event.clientY - pointer.y;
       pointer.x = event.clientX;
       pointer.y = event.clientY;
       if (glow) glow.classList.add('is-visible');
+      var now = performance.now();
+      if (dx * dx + dy * dy > 25 && now - lastPointerComet > 180 && comets.length < 6) {
+        spawnComet(now, pointer.x, pointer.y, dx, dy, true);
+        lastPointerComet = now;
+      }
     }, { passive: true });
 
     window.addEventListener('pointerleave', function () {
