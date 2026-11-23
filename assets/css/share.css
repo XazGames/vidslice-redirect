@@ -1,5 +1,23 @@
 /* VidSlice - project sharing UI. */
 
+html,
+body,
+body * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+input,
+textarea,
+select,
+option,
+[contenteditable="true"],
+[contenteditable=""],
+[contenteditable="plaintext-only"] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
 .share-project-btn {
   display: inline-flex;
   align-items: center;
