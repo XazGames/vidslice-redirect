@@ -3,7 +3,6 @@
   'use strict';
 
   var $ = function (id) { return document.getElementById(id); };
-  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function formatBytes(bytes) {
     if (!bytes || bytes < 0) return '-';
@@ -93,7 +92,7 @@
         var dist = Math.sqrt(dx * dx + dy * dy) || 1;
         var force = Math.max(0, 1 - dist / 260);
         var pull = force * force * 26;
-        var drift = reduceMotion ? 0 : Math.sin(time / 900 + d.phase) * 3;
+        var drift = Math.sin(time / 900 + d.phase) * 3;
         var x = d.x + (dx / dist) * pull;
         var y = d.y + (dy / dist) * pull + drift;
         ctx.beginPath();
@@ -124,8 +123,7 @@
     window.addEventListener('resize', resize);
     resize();
 
-    if (!reduceMotion) requestAnimationFrame(frame);
-    else if (glow) glow.style.transform = 'translate3d(' + pointer.x + 'px,' + pointer.y + 'px,0)';
+    requestAnimationFrame(frame);
   }
 
   /* ---------- photo tool ---------- */
@@ -426,10 +424,11 @@
     }
 
     function scaleFilter(preset) {
-      if (preset === '1080') return "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1";
-      if (preset === '720') return "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1";
-      if (preset === '480') return "scale=w='min(854,iw)':h='min(480,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1";
-      return 'setsar=1';
+      var even = "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1";
+      if (preset === '1080') return "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease," + even;
+      if (preset === '720') return "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease," + even;
+      if (preset === '480') return "scale=w='min(854,iw)':h='min(480,ih)':force_original_aspect_ratio=decrease," + even;
+      return even;
     }
 
     function buildArgs(inputName, outputName, hasAudio, start, length) {
