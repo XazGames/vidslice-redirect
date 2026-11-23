@@ -9001,3 +9001,17 @@ html[data-static="true"] #botGate {
     display: none;
   }
 }
+
+/* Launch screen: keep the glass look, but avoid full-screen repaints.
+   Animated blurred glows under a fullscreen backdrop-filter make the disk spin. */
+.welcome,
+.welcome__center {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.welcome__glow {
+  filter: blur(48px) !important;
+  animation: none !important;
+  will-change: auto !important;
+}
