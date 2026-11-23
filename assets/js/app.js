@@ -45,6 +45,91 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
   }
 
+  var crcTable = null;
+
+  function crc32(bytes) {
+    if (!crcTable) {
+      crcTable = new Uint32Array(256);
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        crcTable[n] = c >>> 0;
+      }
+    }
+    var crc = 0xffffffff;
+    for (var i = 0; i < bytes.length; i++) crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  async function makeZip(entries) {
+    var encoder = new TextEncoder();
+    var parts = [];
+    var central = [];
+    var offset = 0;
+    var used = {};
+
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i];
+      var name = entry.name;
+      if (used[name]) {
+        var dot = name.lastIndexOf('.');
+        var base = dot > 0 ? name.slice(0, dot) : name;
+        var ext = dot > 0 ? name.slice(dot) : '';
+        name = base + '-' + (used[name] + 1) + ext;
+      }
+      used[entry.name] = (used[entry.name] || 0) + 1;
+
+      var nameBytes = encoder.encode(name);
+      var data = new Uint8Array(await entry.blob.arrayBuffer());
+      var crc = crc32(data);
+      var local = new Uint8Array(30 + nameBytes.length);
+      var lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0x0800, true);
+      lv.setUint16(8, 0, true);
+      lv.setUint16(10, 0, true);
+      lv.setUint16(12, 33, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, data.length, true);
+      lv.setUint32(22, data.length, true);
+      lv.setUint16(26, nameBytes.length, true);
+      lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+
+      var record = new Uint8Array(46 + nameBytes.length);
+      var rv = new DataView(record.buffer);
+      rv.setUint32(0, 0x02014b50, true);
+      rv.setUint16(4, 20, true);
+      rv.setUint16(6, 20, true);
+      rv.setUint16(8, 0x0800, true);
+      rv.setUint16(10, 0, true);
+      rv.setUint16(12, 0, true);
+      rv.setUint16(14, 33, true);
+      rv.setUint32(16, crc, true);
+      rv.setUint32(20, data.length, true);
+      rv.setUint32(24, data.length, true);
+      rv.setUint16(28, nameBytes.length, true);
+      rv.setUint32(42, offset, true);
+      record.set(nameBytes, 46);
+
+      parts.push(local, data);
+      central.push(record);
+      offset += local.length + data.length;
+    }
+
+    var centralSize = 0;
+    for (var j = 0; j < central.length; j++) centralSize += central[j].length;
+    var end = new Uint8Array(22);
+    var ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(8, central.length, true);
+    ev.setUint16(10, central.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, offset, true);
+    return new Blob(parts.concat(central, [end]), { type: 'application/zip' });
+  }
+
   /* ---------- shared UI helpers ---------- */
 
   var toastStack = null;
@@ -406,6 +491,7 @@
     var cropRow = $('cropRow');
     var cropRatio = $('photoCropRatio');
     var cropReset = $('photoCropReset');
+    var squareBtn = $('photoSquare');
     var drop = $('photoDrop');
     var replaceBtn = $('photoReplace');
     var addBtn = $('photoAdd');
@@ -431,10 +517,47 @@
     var jobs = [];
     var active = -1;
     var thumbsFresh = false;
-    function defaultCrop() { return { x: 0.1, y: 0.1, w: 0.8, h: 0.8, ratio: 'free' }; }
+    function defaultCrop() { return { x: 0, y: 0, w: 1, h: 1, ratio: 'free', square: false }; }
     function storeCrop() { var job = activeJob(); if (job) job.crop = Object.assign({}, crop); }
     var crop = defaultCrop();
     var drag = null;
+
+    function outputName(job) {
+      var base = job.name.replace(/\.[^.]+$/, '');
+      var type = (job.blob && job.blob.type) || job.resultType || job.file.type || '';
+      return base + ' by vidslice.' + extFor(type);
+    }
+
+    function updateSquareButton() {
+      if (!squareBtn) return;
+      var job = activeJob();
+      var on = Boolean(job && job.crop && job.crop.square);
+      squareBtn.classList.toggle('is-active', on);
+      squareBtn.textContent = on ? 'Вернуть исходник' : 'Квадрат 1:1';
+    }
+
+    function toggleSquare() {
+      var job = activeJob();
+      if (!job || !preview.naturalWidth) return;
+      if (job.crop && job.crop.square) {
+        crop = defaultCrop();
+      } else {
+        var side = Math.min(preview.naturalWidth, preview.naturalHeight);
+        crop = {
+          x: (preview.naturalWidth - side) / (2 * preview.naturalWidth),
+          y: (preview.naturalHeight - side) / (2 * preview.naturalHeight),
+          w: side / preview.naturalWidth,
+          h: side / preview.naturalHeight,
+          ratio: '1:1',
+          square: true
+        };
+      }
+      if (cropRatio) cropRatio.value = crop.ratio;
+      storeCrop();
+      paintCrop();
+      updateSquareButton();
+      invalidateResults();
+    }
 
     var picker = makePicker({
       id: 'photoPicker',
@@ -540,8 +663,10 @@
 
     function resetCrop() {
       crop = defaultCrop();
-      crop.ratio = cropRatio ? cropRatio.value : 'free';
-      applyRatio(true);
+      if (cropRatio) cropRatio.value = 'free';
+      storeCrop();
+      paintCrop();
+      updateSquareButton();
     }
 
     function showJob(index) {
@@ -550,7 +675,11 @@
       var job = jobs[active];
       crop = job.crop || (job.crop = defaultCrop());
       if (cropRatio) cropRatio.value = crop.ratio || 'free';
-      preview.onload = function () { applyRatio(false); paintCrop(); };
+      updateSquareButton();
+      preview.onload = function () {
+        if (!(crop && crop.square && crop.ratio === '1:1')) applyRatio(false);
+        paintCrop();
+      };
       preview.src = job.url;
       preview.hidden = false;
       reveal(preview);
@@ -733,11 +862,12 @@
         if (download) download.disabled = !activeJob() || !activeJob().blob;
         if (downloadAll) downloadAll.disabled = jobs.some(function (job) { return !job.blob; });
         scrollToNode(download, 350);
-        toast('Готово', done > 1 ? 'Сжато ' + done + ' фото - скачиваем' : 'Фото сжато - скачиваем');
-        var ready = jobs.filter(function (job) { return job.blob; });
-        ready.forEach(function (job, index) {
-          setTimeout(function () { downloadJob(job); }, 120 + index * 260);
-        });
+        if (done > 1) {
+          toast('Готово', 'Сжато ' + done + ' фото - нажмите «Скачать все»');
+        } else {
+          toast('Готово', 'Фото сжато - скачиваем');
+          setTimeout(function () { downloadJob(activeJob()); }, 150);
+        }
       } catch (e) {
         clearProgress();
         showError(error, (e && e.message) || 'Не удалось сжать фото.');
@@ -750,8 +880,21 @@
 
     function downloadJob(job) {
       if (!job || !job.blob) return;
-      var base = job.name.replace(/\.[^.]+$/, '');
-      downloadBlob(job.blob, base + '-vidslice.' + extFor(job.resultType));
+      downloadBlob(job.blob, outputName(job));
+    }
+
+    async function downloadAllJobs() {
+      var ready = jobs.filter(function (job) { return job.blob; });
+      if (!ready.length) return;
+      if (ready.length === 1) { downloadJob(ready[0]); return; }
+      try {
+        var entries = ready.map(function (job) { return { name: outputName(job), blob: job.blob }; });
+        var archive = await makeZip(entries);
+        downloadBlob(archive, 'vidslice-photos by vidslice.zip');
+        toast('Архив готов', ready.length + ' фото в одном ZIP-файле');
+      } catch (e) {
+        toast('Не удалось собрать архив', 'Попробуйте скачать фото по одному', 'error');
+      }
     }
 
     input.addEventListener('change', function () {
@@ -766,12 +909,7 @@
     if (format) format.addEventListener('change', invalidateResults);
     if (size) size.addEventListener('change', invalidateResults);
     if (download) download.addEventListener('click', function () { downloadJob(activeJob()); });
-    if (downloadAll) downloadAll.addEventListener('click', function () {
-      jobs.forEach(function (job, index) {
-        if (!job.blob) return;
-        setTimeout(function () { downloadJob(job); }, index * 260);
-      });
-    });
+    if (downloadAll) downloadAll.addEventListener('click', downloadAllJobs);
     if (replaceBtn) replaceBtn.addEventListener('click', picker.open);
     if (addBtn) addBtn.addEventListener('click', picker.open);
     if (removeBtn) removeBtn.addEventListener('click', removeActive);
@@ -791,10 +929,14 @@
 
     if (cropRatio) cropRatio.addEventListener('change', function () {
       crop.ratio = cropRatio.value;
+      crop.square = crop.ratio === '1:1';
       applyRatio(true);
+      storeCrop();
+      updateSquareButton();
       invalidateResults();
     });
     if (cropReset) cropReset.addEventListener('click', function () { resetCrop(); invalidateResults(); });
+    if (squareBtn) squareBtn.addEventListener('click', toggleSquare);
 
     if (cropBox && cropHandle) {
       cropBox.addEventListener('pointerdown', function (e) {
