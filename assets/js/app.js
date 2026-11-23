@@ -1137,8 +1137,8 @@
       onFiles: function (files) { setFile(files[0]); }
     });
 
-    var CORE_URL = new URL('vendor/ffmpeg/ffmpeg-core.js', document.baseURI).href;
-    var WASM_GZ_URL = new URL('vendor/ffmpeg/ffmpeg-core.wasm.gz', document.baseURI).href;
+    var CORE_URL = new URL('/vendor/ffmpeg/ffmpeg-core.js', location.origin).href;
+    var WASM_GZ_URL = new URL('/vendor/ffmpeg/ffmpeg-core.wasm.gz', location.origin).href;
     var CDN_WASM_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm';
     var engine = null;
     var enginePromise = null;
