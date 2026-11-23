@@ -3,9 +3,14 @@
   'use strict';
 
   function init() {
-    var root = document.documentElement;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    var targets = Array.prototype.slice.call(document.querySelectorAll('.shell, .topbar, .studio'));
+    if (!targets.length) return;
+
     var pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2, active: false };
     var current = { x: 0, y: 0 };
+    var last = performance.now();
 
     window.addEventListener('pointermove', function (event) {
       pointer.x = event.clientX;
@@ -24,23 +29,45 @@
       }
     });
 
-    function tick() {
+    document.addEventListener('visibilitychange', function () {
+      last = performance.now();
+    });
+
+    function update(now) {
+      var dt = Math.min(now - last, 64);
+      last = now;
       var nx = 0;
       var ny = 0;
+
       if (pointer.active) {
         nx = (pointer.x / Math.max(window.innerWidth, 1) - 0.5) * 2;
         ny = (pointer.y / Math.max(window.innerHeight, 1) - 0.5) * 2;
       }
+
       var targetX = -nx * 5;
       var targetY = -ny * 5;
-      current.x += (targetX - current.x) * 0.08;
-      current.y += (targetY - current.y) * 0.08;
-      root.style.setProperty('--gui-x', current.x.toFixed(2) + 'px');
-      root.style.setProperty('--gui-y', current.y.toFixed(2) + 'px');
+      var ease = 1 - Math.exp(-dt / 70);
+      current.x += (targetX - current.x) * ease;
+      current.y += (targetY - current.y) * ease;
+
+      var value = current.x.toFixed(2) + 'px ' + current.y.toFixed(2) + 'px';
+      for (var i = 0; i < targets.length; i++) {
+        targets[i].style.translate = value;
+      }
     }
 
-    tick();
-    setInterval(tick, 32);
+    var rafSeen = false;
+
+    function frame(now) {
+      rafSeen = true;
+      update(now);
+      requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+    setInterval(function () {
+      if (!rafSeen) update(performance.now());
+    }, 16);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
