@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>VidSlice - сжатие фото</title>
+  <meta name="theme-color" content="#050506">
+  <script>
+    try {
+      var savedTheme = localStorage.getItem('vidslice-theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
+    } catch (error) { }
+  </script>
+  <link rel="icon" href="/assets/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/app.css?v=20261123g14">
+  <link rel="stylesheet" href="/assets/css/mobile-sheets.css?v=20261123m4">
+  <link rel="stylesheet" href="/assets/css/site-decor-v2.css?v=20261123d11">
+  <link rel="stylesheet" href="/assets/css/share.css?v=20261123s1">
+  <script src="/assets/js/app.js?v=20261123g20" defer></script>
+  <script src="/assets/js/mobile-sheets.js?v=20261123m4" defer></script>
+  <script src="/assets/js/site-decor.js?v=20261123d10" defer></script>
+  <script src="/assets/js/share.js?v=20261123s1" defer></script>
+</head>
+<body data-page="photo">
+  <div class="cursor-glow" aria-hidden="true"></div>
+  <canvas class="dot-field" aria-hidden="true"></canvas>
+
+  <main class="shell">
+    <div class="toolbar">
+      <a class="back" href="/home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> К выбору инструмента</a>
+      <div class="brand"><span class="brand__mark">V</span> VidSlice <em>фото</em></div>
+      <div class="top-controls">
+        <button class="theme-btn" id="themeToggle" type="button" aria-label="Переключить тему" title="Переключить тему">
+          <svg class="icon icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg>
+          <svg class="icon icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5a8.5 8.5 0 1 0 10.6 10.6Z"/></svg>
+        </button>
+        <button class="account-btn" id="accountBtn" type="button" aria-label="Аккаунт" title="Аккаунт">
+          <span class="account-btn__avatar" data-account-avatar>Г</span>
+          <span class="account-btn__label" data-account-name>Войти</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="tool">
+      <section class="panel panel--stage">
+        <h1 class="panel__title">Фото</h1>
+        <p class="panel__hint">Можно загрузить несколько фото сразу. По умолчанию сохраняется исходный кадр; кнопка «Квадрат» обрезает только текущее фото.</p>
+
+        <div class="photo-stage" id="photoStage">
+          <img id="photoPreview" class="preview" alt="Предпросмотр фото" hidden>
+          <div class="crop-box" id="cropBox" hidden>
+            <button class="crop-box__handle" id="cropHandle" type="button" aria-label="Изменить размер кадра"></button>
+          </div>
+        </div>
+
+        <div class="crop-row" id="cropRow" hidden>
+          <div class="field">
+            <label for="photoCropRatio">Пропорции кадра</label>
+            <select id="photoCropRatio">
+              <option value="free">Произвольные</option>
+              <option value="1:1">1:1</option>
+              <option value="4:3">4:3</option>
+              <option value="3:4">3:4</option>
+              <option value="16:9">16:9</option>
+              <option value="9:16">9:16</option>
+            </select>
+          </div>
+          <button class="btn" id="photoSquare" type="button">Квадрат 1:1</button>
+          <button class="btn" id="photoCropReset" type="button">Сбросить кадр</button>
+        </div>
+
+        <div class="thumbs" id="photoThumbs" hidden></div>
+
+        <div class="upload-wrap" id="photoUpload">
+          <label class="drop" id="photoDrop">
+            <div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15.5v2.2A2.3 2.3 0 0 0 6.3 20h11.4a2.3 2.3 0 0 0 2.3-2.3v-2.2"/></svg>
+              <strong data-drop-label>Перетащите фото сюда</strong>
+              <span>или нажмите, чтобы выбрать файлы - JPEG, PNG, WebP, можно сразу несколько</span>
+            </div>
+          </label>
+          <div class="replace-row">
+            <button class="replace-btn" id="photoReplace" type="button" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+              <span>Заменить фото</span>
+            </button>
+            <button class="btn" id="photoAdd" type="button" hidden>Добавить фото</button>
+            <button class="btn" id="photoRemove" type="button" hidden>Убрать текущее</button>
+          </div>
+          <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+        </div>
+
+        <div class="meta">
+          <div><span>Было</span><strong id="photoBefore">-</strong></div>
+          <div><span>Стало</span><strong id="photoAfter">-</strong></div>
+          <div><span>Экономия</span><strong id="photoSaving">-</strong></div>
+        </div>
+
+        <div class="error" id="photoError"></div>
+
+        <div class="progress" id="photoProgress">
+          <div class="progress__bar"><div class="progress__fill" id="photoProgressFill"></div></div>
+          <div class="progress__text" id="photoProgressText"></div>
+        </div>
+
+        <div class="result" id="photoResult">
+          <strong>Результат готов</strong>
+          <p data-result-text></p>
+          <div class="actions">
+            <button class="btn btn--primary" id="photoDownload" type="button" disabled>Скачать текущее</button>
+            <div class="download-all" id="photoDownloadAllGroup" hidden>
+              <div class="download-all__row">
+                <button class="btn" id="photoDownloadAll" type="button" disabled>Скачать все в архиве</button>
+                <button class="btn download-all__toggle" id="photoDownloadAllToggle" type="button" aria-label="Показать отдельные файлы" aria-expanded="false" aria-controls="photoDownloadAllList" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+              </div>
+              <div class="download-all__list" id="photoDownloadAllList" hidden></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <h2 class="panel__title">Настройки</h2>
+        <p class="panel__hint">Сохраняем именно выбранный формат. Если файл станет больше исходника, это будет видно в статистике - формат не подменяем.</p>
+
+        <div class="field">
+          <label for="photoFormat">Формат</label>
+          <select id="photoFormat">
+            <option value="image/jpeg">JPEG</option>
+            <option value="image/webp" selected>WebP</option>
+            <option value="image/png">PNG</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="photoQuality">Качество <b id="photoQualityValue">80%</b></label>
+          <input id="photoQuality" type="range" min="10" max="95" step="1" value="80">
+        </div>
+
+        <div class="field">
+          <label for="photoSize">Сторона</label>
+          <select id="photoSize">
+            <option value="0">Оригинал</option>
+            <option value="2560">до 2560 px</option>
+            <option value="1920">до 1920 px</option>
+            <option value="1280" selected>до 1280 px</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary" id="photoCompress" type="button" disabled>Сжать фото</button>
+        </div>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>
