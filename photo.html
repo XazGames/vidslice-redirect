@@ -12,8 +12,8 @@
     } catch (error) { }
   </script>
   <link rel="icon" href="assets/img/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="assets/css/app.css?v=20261123f1">
-  <script src="assets/js/app.js?v=20261123f1" defer></script>
+  <link rel="stylesheet" href="assets/css/app.css?v=20261123g1">
+  <script src="assets/js/app.js?v=20261123g1" defer></script>
 </head>
 <body data-page="photo">
   <div class="cursor-glow" aria-hidden="true"></div>
@@ -38,18 +38,50 @@
     <div class="tool">
       <section class="panel panel--stage">
         <h1 class="panel__title">Фото</h1>
-        <p class="panel__hint">Файл не загружается на сервер. Фото появится сверху, а область загрузки останется доступной, чтобы заменить файл.</p>
+        <p class="panel__hint">Можно загрузить несколько фото сразу. Кадр можно подвинуть и изменить его размер - сжатие будет применено к выделенной области.</p>
 
-        <img id="photoPreview" class="preview" alt="Предпросмотр фото" hidden>
-
-        <label class="drop" id="photoDrop" for="photoInput">
-          <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
-          <div>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15.5v2.2A2.3 2.3 0 0 0 6.3 20h11.4a2.3 2.3 0 0 0 2.3-2.3v-2.2"/></svg>
-            <strong data-drop-label>Перетащите фото сюда</strong>
-            <span>или нажмите, чтобы выбрать файл - JPEG, PNG, WebP</span>
+        <div class="photo-stage" id="photoStage">
+          <img id="photoPreview" class="preview" alt="Предпросмотр фото" hidden>
+          <div class="crop-box" id="cropBox" hidden>
+            <button class="crop-box__handle" id="cropHandle" type="button" aria-label="Изменить размер кадра"></button>
           </div>
-        </label>
+        </div>
+
+        <div class="crop-row" id="cropRow" hidden>
+          <div class="field">
+            <label for="photoCropRatio">Пропорции кадра</label>
+            <select id="photoCropRatio">
+              <option value="free">Произвольные</option>
+              <option value="1:1">1:1</option>
+              <option value="4:3">4:3</option>
+              <option value="3:4">3:4</option>
+              <option value="16:9">16:9</option>
+              <option value="9:16">9:16</option>
+            </select>
+          </div>
+          <button class="btn" id="photoCropReset" type="button">Сбросить кадр</button>
+        </div>
+
+        <div class="thumbs" id="photoThumbs" hidden></div>
+
+        <div class="upload-wrap" id="photoUpload">
+          <label class="drop" id="photoDrop">
+            <div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15.5v2.2A2.3 2.3 0 0 0 6.3 20h11.4a2.3 2.3 0 0 0 2.3-2.3v-2.2"/></svg>
+              <strong data-drop-label>Перетащите фото сюда</strong>
+              <span>или нажмите, чтобы выбрать файлы - JPEG, PNG, WebP, можно сразу несколько</span>
+            </div>
+          </label>
+          <div class="replace-row">
+            <button class="replace-btn" id="photoReplace" type="button" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+              <span>Заменить фото</span>
+            </button>
+            <button class="btn" id="photoAdd" type="button" hidden>Добавить фото</button>
+            <button class="btn" id="photoRemove" type="button" hidden>Убрать текущее</button>
+          </div>
+          <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+        </div>
 
         <div class="meta">
           <div><span>Было</span><strong id="photoBefore">-</strong></div>
@@ -62,7 +94,10 @@
         <div class="result" id="photoResult">
           <strong>Результат готов</strong>
           <p data-result-text></p>
-          <div class="actions"><button class="btn btn--primary" id="photoDownload" type="button" disabled>Скачать</button></div>
+          <div class="actions">
+            <button class="btn btn--primary" id="photoDownload" type="button" disabled>Скачать текущее</button>
+            <button class="btn" id="photoDownloadAll" type="button" hidden>Скачать все</button>
+          </div>
         </div>
       </section>
 
