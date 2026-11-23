@@ -151,11 +151,12 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 24px;
   background:
-    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, 0.09), transparent 62%),
-    rgba(14, 15, 19, 0.86);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(16, 18, 24, 0.74);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   text-align: center;
-  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(22px) saturate(120%);
+  backdrop-filter: blur(22px) saturate(120%);
   animation: vs-loader-in 0.5s var(--ease-out, ease-out) both;
 }
 
@@ -180,7 +181,7 @@
 .project-loader__ring--two {
   inset: 11px;
   border-color: rgba(255, 255, 255, 0.08);
-  border-bottom-color: rgba(180, 190, 255, 0.85);
+  border-bottom-color: rgba(255, 255, 255, 0.75);
   animation-duration: 1.75s;
   animation-direction: reverse;
 }
@@ -193,12 +194,12 @@
   display: grid;
   place-items: center;
   border-radius: 15px;
-  background: linear-gradient(145deg, #f6f7fb, #aeb6c9);
+  background: linear-gradient(145deg, #f5f6f8, #c7ccd6);
   color: #0b0c10;
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.04em;
-  box-shadow: 0 0 32px rgba(210, 220, 255, 0.28);
+  box-shadow: 0 0 28px rgba(255, 255, 255, 0.12);
   animation: vs-loader-pulse 2.4s ease-in-out infinite;
 }
 
@@ -217,8 +218,8 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #dfe5ff;
-  box-shadow: 0 0 14px 3px rgba(200, 210, 255, 0.65);
+  background: #f1f3f7;
+  box-shadow: 0 0 12px 3px rgba(255, 255, 255, 0.35);
 }
 
 .project-loader__eyebrow {
@@ -278,8 +279,8 @@
 }
 
 @keyframes vs-loader-pulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 26px rgba(210, 220, 255, 0.22); }
-  50% { transform: scale(1.06); box-shadow: 0 0 40px rgba(210, 220, 255, 0.45); }
+  0%, 100% { transform: scale(1); box-shadow: 0 0 22px rgba(255, 255, 255, 0.1); }
+  50% { transform: scale(1.05); box-shadow: 0 0 34px rgba(255, 255, 255, 0.2); }
 }
 
 @keyframes vs-loader-slide {
