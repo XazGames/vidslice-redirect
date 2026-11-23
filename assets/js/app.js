@@ -514,6 +514,9 @@
     var button = $('photoCompress');
     var download = $('photoDownload');
     var downloadAll = $('photoDownloadAll');
+    var downloadAllGroup = $('photoDownloadAllGroup');
+    var downloadAllToggle = $('photoDownloadAllToggle');
+    var downloadAllList = $('photoDownloadAllList');
     var result = $('photoResult');
     var error = $('photoError');
     var progress = $('photoProgress');
@@ -524,6 +527,7 @@
     var jobs = [];
     var active = -1;
     var thumbsFresh = false;
+    var listTimer = null;
     function defaultCrop() { return { x: 0, y: 0, w: 1, h: 1, ratio: 'free', square: false }; }
     function storeCrop() { var job = activeJob(); if (job) job.crop = Object.assign({}, crop); }
     var crop = defaultCrop();
@@ -624,12 +628,80 @@
       if (progressFill) progressFill.style.width = '0%';
     }
 
+    function renderFileList() {
+      if (!downloadAllList) return;
+      downloadAllList.innerHTML = '';
+      var ready = jobs.filter(function (job) { return job.blob; });
+      if (!ready.length) return;
+
+      var hint = document.createElement('div');
+      hint.className = 'download-file-hint';
+      hint.textContent = 'Отдельные файлы';
+      downloadAllList.appendChild(hint);
+
+      ready.forEach(function (job) {
+        var row = document.createElement('div');
+        row.className = 'download-file';
+
+        var icon = document.createElement('span');
+        icon.className = 'download-file__icon';
+        var image = document.createElement('img');
+        image.src = job.resultUrl || job.url;
+        image.alt = '';
+        icon.appendChild(image);
+
+        var meta = document.createElement('span');
+        meta.className = 'download-file__meta';
+        var name = document.createElement('strong');
+        name.textContent = outputName(job);
+        name.title = name.textContent;
+        var detail = document.createElement('span');
+        detail.textContent = formatBytes(job.resultBytes || job.blob.size) + ' - ' + formatLabel(job.resultType || job.blob.type);
+        meta.appendChild(name);
+        meta.appendChild(detail);
+
+        var one = document.createElement('button');
+        one.className = 'download-file__btn';
+        one.type = 'button';
+        one.textContent = 'Скачать';
+        one.setAttribute('aria-label', 'Скачать ' + name.textContent);
+        one.addEventListener('click', function () { downloadJob(job); });
+
+        row.appendChild(icon);
+        row.appendChild(meta);
+        row.appendChild(one);
+        downloadAllList.appendChild(row);
+      });
+    }
+
+    function setFileList(open) {
+      if (!downloadAllToggle || !downloadAllList) return;
+      var ready = jobs.length > 1 && jobs.every(function (job) { return job.blob; });
+      if (open && !ready) open = false;
+      if (listTimer) { clearTimeout(listTimer); listTimer = null; }
+      downloadAllToggle.classList.toggle('is-open', open);
+      downloadAllToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      downloadAllToggle.setAttribute('aria-label', open ? 'Скрыть отдельные файлы' : 'Показать отдельные файлы');
+      if (open) {
+        renderFileList();
+        downloadAllList.hidden = false;
+        downloadAllList.classList.add('is-open');
+      } else {
+        downloadAllList.classList.remove('is-open');
+        listTimer = setTimeout(function () {
+          if (!downloadAllList.classList.contains('is-open')) downloadAllList.hidden = true;
+        }, 280);
+      }
+    }
+
     function invalidateResults() {
       jobs.forEach(resetResult);
       clearProgress();
       if (result) result.classList.remove('is-active');
       if (download) download.disabled = true;
       if (downloadAll) downloadAll.disabled = true;
+      if (downloadAllToggle) downloadAllToggle.disabled = true;
+      setFileList(false);
       if (after) after.textContent = '-';
       if (saving) saving.textContent = '-';
     }
@@ -789,7 +861,11 @@
         button.disabled = !has;
         button.textContent = jobs.length > 1 ? 'Сжать все (' + jobs.length + ')' : 'Сжать фото';
       }
-      if (downloadAll) downloadAll.hidden = jobs.length < 2;
+      var ready = jobs.length > 1 && jobs.every(function (job) { return job.blob; });
+      if (downloadAllGroup) downloadAllGroup.hidden = jobs.length < 2;
+      if (downloadAll) downloadAll.disabled = !ready;
+      if (downloadAllToggle) downloadAllToggle.disabled = !ready;
+      if (!ready) setFileList(false);
       renderThumbs();
       renderStats();
     }
@@ -830,6 +906,7 @@
       if (!jobs.length) return;
       showError(error, '');
       if (button) button.disabled = true;
+      setFileList(false);
       invalidateResults();
       var done = 0;
       try {
@@ -861,7 +938,7 @@
         if (downloadAll) downloadAll.disabled = jobs.some(function (job) { return !job.blob; });
         scrollToNode(download, 350);
         if (done > 1) {
-          toast('Готово', 'Сжато ' + done + ' фото - нажмите «Скачать все»');
+          toast('Готово', 'Сжато ' + done + ' фото - нажмите «Скачать все в архиве»');
         } else {
           toast('Готово', 'Фото сжато - скачиваем');
           setTimeout(function () { downloadJob(activeJob()); }, 150);
@@ -908,6 +985,9 @@
     if (size) size.addEventListener('change', invalidateResults);
     if (download) download.addEventListener('click', function () { downloadJob(activeJob()); });
     if (downloadAll) downloadAll.addEventListener('click', downloadAllJobs);
+    if (downloadAllToggle) downloadAllToggle.addEventListener('click', function () {
+      setFileList(!downloadAllToggle.classList.contains('is-open'));
+    });
     if (replaceBtn) replaceBtn.addEventListener('click', picker.open);
     if (addBtn) addBtn.addEventListener('click', picker.open);
     if (removeBtn) removeBtn.addEventListener('click', removeActive);
