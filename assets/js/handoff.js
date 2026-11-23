@@ -39,6 +39,54 @@
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
+  var toastStack = null;
+
+  function vsToast(title, sub) {
+    if (!toastStack) {
+      toastStack = document.createElement('div');
+      toastStack.className = 'vs-toast-stack';
+      toastStack.setAttribute('aria-live', 'polite');
+      document.body.appendChild(toastStack);
+    }
+    var node = document.createElement('div');
+    node.className = 'vs-toast';
+    node.setAttribute('role', 'status');
+    node.innerHTML = '<span class="vs-toast__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg></span>' +
+      '<span class="vs-toast__body"><span class="vs-toast__title"></span><span class="vs-toast__sub"></span></span>' +
+      '<i class="vs-toast__life"></i>';
+    node.querySelector('.vs-toast__title').textContent = title;
+    var subNode = node.querySelector('.vs-toast__sub');
+    if (sub) subNode.textContent = sub; else subNode.remove();
+    toastStack.appendChild(node);
+    while (toastStack.children.length > 3) toastStack.firstChild.remove();
+    var leaving = false;
+    function dismiss() {
+      if (leaving) return;
+      leaving = true;
+      node.classList.add('is-leaving');
+      setTimeout(function () { node.remove(); }, 320);
+    }
+    node.addEventListener('click', dismiss);
+    setTimeout(dismiss, 4200);
+  }
+
+  var handoffActive = false;
+
+  function watchUploads() {
+    var video = document.getElementById('video');
+    var input = document.getElementById('fileInput');
+    if (!video || typeof MutationObserver === 'undefined') return;
+    var last = video.getAttribute('src') || '';
+    new MutationObserver(function () {
+      var src = video.getAttribute('src') || '';
+      if (!src || src === last) return;
+      last = src;
+      if (handoffActive) return;
+      var name = input && input.files && input.files[0] ? input.files[0].name : '';
+      vsToast('Видео загружено', name);
+    }).observe(video, { attributes: true, attributeFilter: ['src'] });
+  }
+
   function formatTime(t) {
     var ms = Math.max(0, Math.round(t * 1000));
     var h = Math.floor(ms / 3600000); ms -= h * 3600000;
@@ -76,6 +124,7 @@
   function inject(data) {
     var input = document.getElementById('fileInput');
     if (!input || !data || !data.blob) return;
+    handoffActive = true;
     var file = new File([data.blob], data.name || 'video.mp4', { type: data.type || 'video/mp4' });
     var transfer = new DataTransfer();
     transfer.items.add(file);
@@ -84,10 +133,17 @@
 
     var attempts = 0;
     (function wait() {
-      if (applyTrim(data)) return;
+      if (applyTrim(data)) {
+        handoffActive = false;
+        vsToast('Видео перенесено', 'Границы обрезки сохранены');
+        return;
+      }
       if (++attempts < 180) requestAnimationFrame(wait);
+      else handoffActive = false;
     })();
   }
+
+  watchUploads();
 
   openDb().then(function (db) {
     return readPending(db).then(function (data) {

@@ -47,6 +47,53 @@
 
   /* ---------- shared UI helpers ---------- */
 
+  var toastStack = null;
+
+  function toast(title, sub, kind) {
+    if (!toastStack) {
+      toastStack = document.createElement('div');
+      toastStack.className = 'toast-stack';
+      toastStack.setAttribute('aria-live', 'polite');
+      document.body.appendChild(toastStack);
+    }
+    var node = document.createElement('div');
+    node.className = 'toast' + (kind === 'error' ? ' toast--error' : '');
+    node.setAttribute('role', 'status');
+    var icon = kind === 'error'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>';
+    node.innerHTML = '<span class="toast__icon">' + icon + '</span>' +
+      '<span class="toast__body"><span class="toast__title"></span><span class="toast__sub"></span></span>' +
+      '<i class="toast__life"></i>';
+    node.querySelector('.toast__title').textContent = title;
+    var subNode = node.querySelector('.toast__sub');
+    if (sub) subNode.textContent = sub; else subNode.remove();
+    toastStack.appendChild(node);
+    while (toastStack.children.length > 3) toastStack.firstChild.remove();
+    var leaving = false;
+    function dismiss() {
+      if (leaving) return;
+      leaving = true;
+      node.classList.add('is-leaving');
+      setTimeout(function () { node.remove(); }, 320);
+    }
+    node.addEventListener('click', dismiss);
+    setTimeout(dismiss, 4200);
+  }
+
+  function reveal(node) {
+    if (!node) return;
+    node.classList.remove('reveal');
+    void node.offsetWidth;
+    node.classList.add('reveal');
+  }
+
+  function animatedClose(wrap) {
+    if (!wrap.classList.contains('is-open') || wrap.classList.contains('is-closing')) return;
+    wrap.classList.add('is-closing');
+    setTimeout(function () { wrap.classList.remove('is-open', 'is-closing'); }, 230);
+  }
+
   function makePicker(cfg) {
     var wrap = document.createElement('div');
     wrap.className = 'picker';
@@ -72,7 +119,7 @@
     var input = wrap.querySelector('[data-picker-input]');
     var drop = wrap.querySelector('[data-picker-drop]');
 
-    function close() { wrap.classList.remove('is-open'); }
+    function close() { animatedClose(wrap); }
     function take(files) {
       var list = files && Array.prototype.slice.call(files);
       if (!list || !list.length) return;
@@ -100,7 +147,7 @@
     });
 
     return {
-      open: function () { wrap.classList.add('is-open'); input.focus(); },
+      open: function () { wrap.classList.remove('is-closing'); wrap.classList.add('is-open'); input.focus(); },
       close: close
     };
   }
@@ -270,6 +317,7 @@
 
     var jobs = [];
     var active = -1;
+    var thumbsFresh = false;
     function defaultCrop() { return { x: 0.1, y: 0.1, w: 0.8, h: 0.8, ratio: 'free' }; }
     function storeCrop() { var job = activeJob(); if (job) job.crop = Object.assign({}, crop); }
     var crop = defaultCrop();
@@ -380,6 +428,7 @@
       preview.onload = function () { applyRatio(false); paintCrop(); };
       preview.src = job.url;
       preview.hidden = false;
+      reveal(preview);
       renderThumbs();
       renderStats();
       paintCrop();
@@ -409,7 +458,11 @@
       showError(error, '');
       invalidateResults();
       showJob(jobs.length - added);
+      thumbsFresh = true;
       renderControls();
+      reveal(stage);
+      toast(added > 1 ? 'Фото загружены' : 'Фото загружено',
+        added > 1 ? added + ' шт. - можно обрезать и сжать каждое' : jobs[jobs.length - added].name);
     }
 
     function removeActive() {
@@ -438,6 +491,10 @@
       jobs.forEach(function (job, index) {
         var node = document.createElement('button');
         node.className = 'thumb' + (index === active ? ' is-active' : '');
+        if (thumbsFresh) {
+          node.classList.add('thumb--in');
+          node.style.animationDelay = (index * 55) + 'ms';
+        }
         node.type = 'button';
         node.title = job.name;
         var img = document.createElement('img');
@@ -447,6 +504,7 @@
         node.addEventListener('click', function () { showJob(index); });
         thumbs.appendChild(node);
       });
+      thumbsFresh = false;
     }
 
     function renderStats() {
@@ -541,6 +599,7 @@
         }
         if (download) download.disabled = !activeJob() || !activeJob().blob;
         if (downloadAll) downloadAll.disabled = jobs.some(function (job) { return !job.blob; });
+        toast('Готово', done > 1 ? 'Сжато ' + done + ' фото' : 'Фото сжато - можно скачивать');
       } catch (e) {
         showError(error, (e && e.message) || 'Не удалось сжать фото.');
       } finally {
@@ -771,6 +830,7 @@
       if (video) {
         video.hidden = false;
         video.src = sourceUrl;
+        reveal(video);
       }
       if (name) name.textContent = next.name;
       if (drop) drop.hidden = true;
@@ -928,6 +988,7 @@
             (outputBlob.size < file.size ? ', вес уменьшен' : ', вес может отличаться от исходника');
         }
         if (download) download.disabled = false;
+        toast('Видео готово', formatBytes(outputBlob.size) + ' - MP4, ' + formatTime(length));
         for (var i = 0; i < cleanup.length; i++) {
           try { await ffmpeg.deleteFile(cleanup[i]); } catch (e) { /* ignore */ }
         }
@@ -958,6 +1019,7 @@
       if (startSlider) startSlider.value = 0;
       if (endSlider) endSlider.value = duration;
       updateTrim();
+      toast('Видео загружено', (file ? file.name + ' - ' : '') + formatTime(duration));
     });
     if (video) video.addEventListener('timeupdate', function () {
       if (!file || !isFinite(video.duration)) return;
@@ -1082,12 +1144,13 @@
     function open() {
       paintButton();
       showStep(storedEmail() ? 'done' : 'email');
+      modal.classList.remove('is-closing');
       modal.classList.add('is-open');
       var focusTarget = storedEmail() ? modal.querySelector('[data-account-logout]') : emailInput;
       if (focusTarget) focusTarget.focus();
     }
 
-    function close() { modal.classList.remove('is-open'); }
+    function close() { animatedClose(modal); }
 
     button.addEventListener('click', open);
     modal.querySelector('[data-account-close]').addEventListener('click', close);
