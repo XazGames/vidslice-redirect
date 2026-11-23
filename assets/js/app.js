@@ -355,6 +355,8 @@
     var width = 0;
     var height = 0;
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var grabbing = false;
+    var grabRadius = 170;
 
     function resize() {
       width = window.innerWidth;
@@ -367,14 +369,18 @@
       var count = Math.max(30, Math.min(90, Math.floor((width * height) / 22000)));
       dots = [];
       comets = [];
+      grabbing = false;
       for (var i = 0; i < count; i++) {
         dots.push({
           x: Math.random() * width,
           y: Math.random() * height,
           ox: 0,
           oy: 0,
+          vx: 0,
+          vy: 0,
           r: 0.6 + Math.random() * 1.4,
-          phase: Math.random() * Math.PI * 2
+          phase: Math.random() * Math.PI * 2,
+          captured: 0
         });
       }
       draw(0);
@@ -410,19 +416,66 @@
     function draw(time, dt) {
       if (!ctx) return;
       ctx.clearRect(0, 0, width, height);
+      var dtSec = dt ? dt / 1000 : 0.016;
       for (var i = 0; i < dots.length; i++) {
         var d = dots[i];
-        var dx = pointer.x - d.x;
-        var dy = pointer.y - d.y;
-        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        var force = Math.max(0, 1 - dist / 260);
-        var pull = force * force * 26;
         var drift = Math.sin(time / 900 + d.phase) * 3;
-        var x = d.x + (dx / dist) * pull;
-        var y = d.y + (dy / dist) * pull + drift;
+        var homeX = d.x;
+        var homeY = d.y + drift;
+        var dx = pointer.x - homeX;
+        var dy = pointer.y - homeY;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        var hover = Math.max(0, 1 - dist / 260);
+        var px = homeX;
+        var py = homeY;
+        var radius = d.r + hover * 1.5;
+        var alpha = 0.18 + hover * 0.45;
+
+        if (grabbing && dist < grabRadius) {
+          var pull = 1 - dist / grabRadius;
+          var targetX = pointer.x - homeX + Math.cos(d.phase * 2.1) * (9 + pull * 14);
+          var targetY = pointer.y - homeY - drift + Math.sin(d.phase * 2.7) * (9 + pull * 14);
+          d.captured = Math.min(1, d.captured + dtSec * (1.8 + pull * 1.6));
+          var ease = 1 - Math.exp(-dtSec * (7 + pull * 9));
+          d.ox += (targetX - d.ox) * ease;
+          d.oy += (targetY - d.oy) * ease;
+          d.vx *= 0.72;
+          d.vy *= 0.72;
+          px = homeX + d.ox;
+          py = homeY + d.oy;
+          radius = d.r + 1.8 + pull * 2.4;
+          alpha = 0.45 + pull * 0.5;
+        } else {
+          var released = d.captured > 0.01 || Math.abs(d.ox) > 0.2 || Math.abs(d.oy) > 0.2 || Math.abs(d.vx) > 0.2 || Math.abs(d.vy) > 0.2;
+          if (released) {
+            d.captured = Math.max(0, d.captured - dtSec * 2.2);
+            var spring = d.captured > 0 ? 20 : 44;
+            var damping = Math.exp(-dtSec * (d.captured > 0 ? 3.2 : 7.5));
+            d.vx += (-d.ox * spring - d.vx * 7.5) * dtSec;
+            d.vy += (-d.oy * spring - d.vy * 7.5) * dtSec;
+            d.vx *= damping;
+            d.vy *= damping;
+            d.ox += d.vx * dtSec;
+            d.oy += d.vy * dtSec;
+            if (d.captured <= 0.01 && Math.abs(d.ox) < 0.18 && Math.abs(d.oy) < 0.18 && Math.abs(d.vx) < 0.18 && Math.abs(d.vy) < 0.18) {
+              d.ox = 0; d.oy = 0; d.vx = 0; d.vy = 0; d.captured = 0;
+            }
+          } else {
+            var pull = hover * hover * 26;
+            px = homeX + (dx / dist) * pull;
+            py = homeY + (dy / dist) * pull;
+          }
+          if (d.ox || d.oy) {
+            px = homeX + d.ox;
+            py = homeY + d.oy;
+            radius = d.r + 0.8 + Math.min(2.2, Math.sqrt(d.vx * d.vx + d.vy * d.vy) / 140);
+            alpha = 0.28 + Math.min(0.55, Math.sqrt(d.ox * d.ox + d.oy * d.oy) / 80);
+          }
+        }
+
         ctx.beginPath();
-        ctx.arc(x, y, d.r + force * 1.5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(' + dotColor + ',' + (0.18 + force * 0.55) + ')';
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(' + dotColor + ',' + alpha + ')';
         ctx.fill();
       }
 
@@ -480,6 +533,20 @@
       requestAnimationFrame(frame);
     }
 
+    function releaseDots() {
+      if (!grabbing) return;
+      grabbing = false;
+      for (var i = 0; i < dots.length; i++) {
+        var d = dots[i];
+        if (d.captured < 0.02 && Math.abs(d.ox) < 0.2 && Math.abs(d.oy) < 0.2) continue;
+        var angle = d.phase * 4.17 + Math.random() * 0.8;
+        var speed = 320 + Math.random() * 520 + d.captured * 220;
+        d.vx += Math.cos(angle) * speed;
+        d.vy += Math.sin(angle) * speed - 120;
+        d.captured = Math.max(d.captured, 0.25);
+      }
+    }
+
     window.addEventListener('pointermove', function (event) {
       var dx = event.clientX - pointer.x;
       var dy = event.clientY - pointer.y;
@@ -493,8 +560,21 @@
       }
     }, { passive: true });
 
+    window.addEventListener('pointerdown', function (event) {
+      if (event.button !== 0) return;
+      if (event.target.closest('button, a, input, textarea, select, label, summary, [role="button"], [contenteditable="true"], .card, .modal, .picker, .account-shell, .projects-gallery, .photo-screen__shell, .cropbox, .timeline, .track')) return;
+      grabbing = true;
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+      if (glow) glow.classList.add('is-visible');
+    });
+
+    window.addEventListener('pointerup', releaseDots);
+    window.addEventListener('pointercancel', releaseDots);
+
     window.addEventListener('pointerleave', function () {
       if (glow) glow.classList.remove('is-visible');
+      releaseDots();
     });
 
     window.addEventListener('resize', resize);
