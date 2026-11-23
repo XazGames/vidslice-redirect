@@ -1200,6 +1200,11 @@
       if (download) download.disabled = true;
       if (exportBtn) exportBtn.disabled = false;
       clearProgress();
+      if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(function () { ensureEngine(function () { }).catch(function () { }); });
+      } else {
+        setTimeout(function () { ensureEngine(function () { }).catch(function () { }); }, 300);
+      }
     }
 
     async function prepareWasm(onProgress) {
@@ -1238,40 +1243,39 @@
       return enginePromise;
     }
 
-    async function probeAudio(ffmpeg, inputName) {
-      var logs = [];
-      var handler = function (event) { if (event.message) logs.push(event.message); };
-      ffmpeg.on('log', handler);
-      try { await ffmpeg.exec(['-i', inputName]); } catch (e) { /* probe always exits non-zero */ }
-      ffmpeg.off('log', handler);
-      return /Stream #\d+:\d+.*Audio:/.test(logs.join('\n'));
-    }
-
     function scaleFilter(preset) {
+      var w = video ? video.videoWidth : 0;
+      var h = video ? video.videoHeight : 0;
       var even = "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1";
-      if (preset === '1080') return "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease," + even;
-      if (preset === '720') return "scale=w='min(1280,iw)':h='min(720,ih)':force_original_aspect_ratio=decrease," + even;
-      if (preset === '480') return "scale=w='min(854,iw)':h='min(480,ih)':force_original_aspect_ratio=decrease," + even;
-      return even;
+      if (preset === 'source' || !preset) {
+        if (w > 0 && h > 0 && w % 2 === 0 && h % 2 === 0) return '';
+        return even;
+      }
+      var cap = preset === '1080' ? [1920, 1080] : preset === '720' ? [1280, 720] : [854, 480];
+      return "scale=w='min(" + cap[0] + ",iw)':h='min(" + cap[1] + ",ih)':force_original_aspect_ratio=decrease:flags=fast_bilinear," + even;
     }
 
-    function buildArgs(inputName, outputName, hasAudio, start, length) {
+    function buildArgs(inputName, outputName, start, length) {
+      var filter = scaleFilter(quality ? quality.value : 'source');
       var args = [
-        '-i', inputName,
         '-ss', start.toFixed(3),
+        '-i', inputName,
         '-t', length.toFixed(3),
-        '-vf', scaleFilter(quality ? quality.value : 'source'),
+        '-map', '0:v:0',
+        '-map', '0:a?'
+      ];
+      if (filter) args.push('-vf', filter);
+      args.push(
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', compressToggle && compressToggle.checked ? '30' : '24',
         '-pix_fmt', 'yuv420p',
         '-g', '60',
-        '-movflags', '+faststart',
-        '-max_muxing_queue_size', '1024'
-      ];
-      if (hasAudio) args.push('-c:a', 'aac', '-b:a', '128k');
-      else args.push('-an');
-      args.push('-y', outputName);
+        '-max_muxing_queue_size', '1024',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-y', outputName
+      );
       return args;
     }
 
@@ -1311,8 +1315,6 @@
           cleanup.push(inputName);
         }
 
-        setProgress(0.38, 'Проверяем дорожки...');
-        var hasAudio = await probeAudio(ffmpeg, inputPath);
         setProgress(0.44, 'Кодируем видео...');
 
         var onProgress = function (event) {
@@ -1330,7 +1332,7 @@
         ffmpeg.on('log', onLog);
 
         try {
-          await ffmpeg.exec(buildArgs(inputPath, outputName, hasAudio, start, length));
+          await ffmpeg.exec(buildArgs(inputPath, outputName, start, length));
         } finally {
           ffmpeg.off('progress', onProgress);
           ffmpeg.off('log', onLog);
