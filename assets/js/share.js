@@ -6,7 +6,12 @@
   var PUBLIC_ORIGIN = 'https://vidslice.run.place';
   var PROJECT_ID_RE = /^[A-Za-z0-9_-]{8,20}$/;
   var SETTINGS_KEY = 'vidslice-share-settings';
-  var MAX_BYTES = 100 * 1024 * 1024;
+  var CHUNK_SIZE = 100 * 1024 * 1024;
+  var META_RESERVE = 64 * 1024;
+  var MAX_PARTS = 50;
+  var MAX_BYTES = MAX_PARTS * CHUNK_SIZE - META_RESERVE;
+  var PART_RE = /^video\.part-(\d{3})\.bin$/;
+  var activeFile = null;
   var busy = 0;
 
   function beginWork() { busy++; }
@@ -71,6 +76,44 @@
       if (!response.ok) throw new Error('HTTP ' + response.status);
       return response.blob();
     });
+  }
+
+  function fetchBuffer(url) {
+    return fetch(url).then(function (response) {
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return response.arrayBuffer();
+    });
+  }
+
+  function partName(index) {
+    return 'video.part-' + ('000' + index).slice(-3) + '.bin';
+  }
+
+  function encodeMeta(meta) {
+    var bytes = new TextEncoder().encode(JSON.stringify(meta));
+    if (bytes.length > META_RESERVE) throw new Error('Настройки проекта слишком большие.');
+    var header = new Uint8Array(4);
+    header[0] = bytes.length & 255;
+    header[1] = (bytes.length >>> 8) & 255;
+    header[2] = (bytes.length >>> 16) & 255;
+    header[3] = (bytes.length >>> 24) & 255;
+    return new Blob([header, bytes], { type: 'application/octet-stream' });
+  }
+
+  function decodeMeta(buffer) {
+    var view = new DataView(buffer);
+    var length = view.getUint32(0, true);
+    if (!length || length > META_RESERVE || 4 + length > buffer.byteLength) {
+      throw new Error('Не удалось прочитать настройки проекта.');
+    }
+    var meta = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 4, length)));
+    var videoPart = new Blob([new Uint8Array(buffer, 4 + length)], { type: 'application/octet-stream' });
+    return { meta: meta, videoPart: videoPart };
+  }
+
+  function rememberFile() {
+    var input = byId('fileInput') || byId('videoInput');
+    if (input && input.files && input.files[0]) activeFile = input.files[0];
   }
 
   function openDb() {
@@ -168,6 +211,7 @@
 
     return {
       blobUrl: video.src,
+      file: activeFile,
       name: String(name).trim() || 'video.mp4',
       start: isFinite(start) ? start : 0,
       end: isFinite(end) ? end : 0,
@@ -212,7 +256,7 @@
       '        <button class="btn btn--primary btn--sm" type="button" data-share-copy>Копировать</button>' +
       '      </div>' +
       '    </div>' +
-      '    <p class="share-modal__note">Нужно видео размером до 100 МБ. Без видео ссылка не создаётся.</p>' +
+      '    <p class="share-modal__note">Поддерживаются файлы до 5 ГБ. Без видео ссылка не создаётся.</p>' +
       '  </div>' +
       '  <div class="share-modal__actions">' +
       '    <button class="btn btn--primary" type="button" data-share-publish>Создать ссылку</button>' +
@@ -264,18 +308,17 @@
       statusNode.textContent = 'Загружаем видео и настройки...';
 
       try {
-        var blob = await fetchBlob(info.blobUrl);
-        if (!blob.size) throw new Error('Видеофайл пуст.');
-        if (blob.size > MAX_BYTES) throw new Error('Файл больше 100 МБ. Такой проект нельзя опубликовать.');
+        var source = info.file || await fetchBlob(info.blobUrl);
+        if (!source.size) throw new Error('Видеофайл пуст.');
+        if (source.size > MAX_BYTES) throw new Error('Файл больше 5 ГБ. Такой проект нельзя опубликовать.');
 
-        var safeName = info.name.replace(/[\\/]/g, '_').slice(0, 120) || 'video.mp4';
         var meta = {
           app: 'vidslice',
           version: 1,
           target: info.target,
           name: info.name,
-          type: blob.type || 'video/mp4',
-          size: blob.size,
+          type: source.type || 'video/mp4',
+          size: source.size,
           start: info.start,
           end: info.end,
           settings: info.settings,
@@ -291,18 +334,29 @@
         var folder = folderRes.folder;
         if (!folder || !folder.id || !folder.manageToken) throw new Error('Хранилище не вернуло папку проекта.');
 
-        statusNode.textContent = 'Публикуем проект...';
-        var form = new FormData();
-        form.append('files', new File([blob], safeName, { type: meta.type }), safeName);
-        form.append('files', new Blob([JSON.stringify(meta, null, 2)], { type: 'application/json' }), 'project.json');
-        form.append('folderId', folder.id);
-        form.append('folderToken', folder.manageToken);
-        var uploaded = await api('/upload/local', { method: 'POST', body: form });
-        if (!uploaded || !uploaded.success) throw new Error('Не удалось загрузить проект.');
+        statusNode.textContent = 'Готовим части проекта...';
+        var metaBlob = encodeMeta(meta);
+        var firstSize = CHUNK_SIZE - metaBlob.size;
+        var parts = [new Blob([metaBlob, source.slice(0, firstSize)], { type: 'application/octet-stream' })];
+        for (var offset = firstSize; offset < source.size; offset += CHUNK_SIZE) {
+          parts.push(source.slice(offset, Math.min(offset + CHUNK_SIZE, source.size)));
+        }
+        if (parts.length > MAX_PARTS) throw new Error('Проект слишком большой для ссылки.');
+
+        for (var i = 0; i < parts.length; i++) {
+          statusNode.textContent = 'Публикуем проект... часть ' + (i + 1) + ' из ' + parts.length;
+          var form = new FormData();
+          form.append('files', parts[i], partName(i));
+          form.append('folderId', folder.id);
+          form.append('folderToken', folder.manageToken);
+          var uploaded = await api('/upload/local', { method: 'POST', body: form });
+          if (!uploaded || !uploaded.success) throw new Error('Не удалось загрузить проект.');
+        }
 
         var check = await api('/folder/' + encodeURIComponent(folder.id));
-        var names = (check.files || []).map(function (file) { return file.name; });
-        if (names.indexOf('project.json') === -1 || names.length < 2) throw new Error('Проект загружен не полностью.');
+        var names = (check.files || []).map(function (file) { return file.name; })
+          .filter(function (name) { return PART_RE.test(name); });
+        if (names.length !== parts.length) throw new Error('Проект загружен не полностью.');
 
         var link = PUBLIC_ORIGIN + '/' + folder.id;
         linkInput.value = link;
@@ -362,7 +416,9 @@
       .filter(Boolean)
       .forEach(function (node) {
         ['loadedmetadata', 'loadeddata', 'canplay', 'emptied', 'change'].forEach(function (type) {
-          node.addEventListener(type, function () { setTimeout(syncShareButton, 60); });
+          node.addEventListener(type, function () {
+            setTimeout(function () { rememberFile(); syncShareButton(); }, 60);
+          });
         });
       });
     setInterval(syncShareButton, 600);
@@ -533,23 +589,45 @@
       statusNode('Проверяем ссылку...');
       var info = await api('/folder/' + encodeURIComponent(segment));
       var files = info.files || [];
-      var metaFile = null;
-      var videoFile = null;
-      files.forEach(function (file) {
-        if (file.name === 'project.json') metaFile = file;
-        else if (!videoFile) videoFile = file;
-      });
-      if (!metaFile || !videoFile) throw new Error('В ссылке нет проекта.');
+      var parts = files.filter(function (file) { return PART_RE.test(file.name); })
+        .sort(function (a, b) {
+          return Number(PART_RE.exec(a.name)[1]) - Number(PART_RE.exec(b.name)[1]);
+        });
+      var meta = null;
+      var blob = null;
+      var videoName = 'video.mp4';
 
-      statusNode('Загружаем настройки проекта...');
-      var meta = await fetchJson(metaFile.downloadUrl);
-      statusNode('Загружаем видео...');
-      var blob = await fetchBlob(videoFile.downloadUrl);
+      if (parts.length) {
+        statusNode('Загружаем настройки проекта...');
+        var firstBuffer = await fetchBuffer(parts[0].downloadUrl);
+        var decoded = decodeMeta(firstBuffer);
+        meta = decoded.meta;
+        videoName = meta.name || videoName;
+        var videoParts = [decoded.videoPart];
+        for (var i = 1; i < parts.length; i++) {
+          statusNode('Загружаем видео... часть ' + (i + 1) + ' из ' + parts.length);
+          videoParts.push(await fetchBlob(parts[i].downloadUrl));
+        }
+        blob = new Blob(videoParts, { type: meta.type || 'video/mp4' });
+      } else {
+        var metaFile = null;
+        var videoFile = null;
+        files.forEach(function (file) {
+          if (file.name === 'project.json') metaFile = file;
+          else if (!videoFile) videoFile = file;
+        });
+        if (!metaFile || !videoFile) throw new Error('В ссылке нет проекта.');
+        statusNode('Загружаем настройки проекта...');
+        meta = await fetchJson(metaFile.downloadUrl);
+        statusNode('Загружаем видео...');
+        blob = await fetchBlob(videoFile.downloadUrl);
+        videoName = meta.name || videoFile.name || videoName;
+      }
       if (!blob.size) throw new Error('Видеофайл пуст.');
       await savePending({
         blob: blob,
-        name: meta.name || videoFile.name || 'video.mp4',
-        type: meta.type || videoFile.mimeType || 'video/mp4',
+        name: videoName,
+        type: meta.type || 'video/mp4',
         start: meta.start,
         end: meta.end
       });
@@ -574,7 +652,7 @@
 
   function init() {
     if (isErrorPage()) { restoreFromLink(); return; }
-    if (isEditor() || isFullEditor()) { addShareButton(); restoreSharedVideo(); }
+    if (isEditor() || isFullEditor()) { rememberFile(); addShareButton(); restoreSharedVideo(); }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
