@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VidSlice - сжатие фото</title>
+  <meta name="theme-color" content="#050506">
+  <link rel="icon" href="assets/img/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/app.css?v=20261123e1">
+  <script src="assets/js/app.js?v=20261123e1" defer></script>
+</head>
+<body data-page="photo">
+  <div class="cursor-glow" aria-hidden="true"></div>
+  <canvas class="dot-field" aria-hidden="true"></canvas>
+
+  <main class="shell">
+    <div class="toolbar">
+      <a class="back" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg> К выбору инструмента</a>
+      <div class="brand"><span class="brand__mark">V</span> VidSlice <em>фото</em></div>
+    </div>
+
+    <div class="tool">
+      <section class="panel panel--stage">
+        <h1 class="panel__title">Фото</h1>
+        <p class="panel__hint">Файл не загружается на сервер. Можно перетащить фото в область ниже.</p>
+
+        <label class="drop" id="photoDrop" for="photoInput">
+          <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          <div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15.5v2.2A2.3 2.3 0 0 0 6.3 20h11.4a2.3 2.3 0 0 0 2.3-2.3v-2.2"/></svg>
+            <strong data-drop-label>Перетащите фото сюда</strong>
+            <span>или нажмите, чтобы выбрать файл - JPEG, PNG, WebP</span>
+          </div>
+        </label>
+
+        <img id="photoPreview" class="preview" alt="Предпросмотр фото" hidden>
+
+        <div class="meta">
+          <div><span>Было</span><strong id="photoBefore">-</strong></div>
+          <div><span>Стало</span><strong id="photoAfter">-</strong></div>
+          <div><span>Экономия</span><strong id="photoSaving">-</strong></div>
+        </div>
+
+        <div class="error" id="photoError"></div>
+
+        <div class="result" id="photoResult">
+          <strong>Результат готов</strong>
+          <p data-result-text></p>
+          <div class="actions"><button class="btn btn--primary" id="photoDownload" type="button" disabled>Скачать</button></div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <h2 class="panel__title">Настройки</h2>
+        <p class="panel__hint">Если выбранный формат сделает файл больше, подберём меньший или оставим исходник.</p>
+
+        <div class="field">
+          <label for="photoFormat">Формат</label>
+          <select id="photoFormat">
+            <option value="image/jpeg">JPEG</option>
+            <option value="image/webp" selected>WebP</option>
+            <option value="image/png">PNG</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="photoQuality">Качество <b id="photoQualityValue">80%</b></label>
+          <input id="photoQuality" type="range" min="10" max="95" step="1" value="80">
+        </div>
+
+        <div class="field">
+          <label for="photoSize">Сторона</label>
+          <select id="photoSize">
+            <option value="0">Оригинал</option>
+            <option value="2560">до 2560 px</option>
+            <option value="1920">до 1920 px</option>
+            <option value="1280" selected>до 1280 px</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary" id="photoCompress" type="button" disabled>Сжать фото</button>
+        </div>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>
