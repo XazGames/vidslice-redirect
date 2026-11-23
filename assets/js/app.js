@@ -4,6 +4,22 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var dotColor = '255, 255, 255';
+  var busyDepth = 0;
+
+  function beginWork() {
+    busyDepth++;
+  }
+
+  function endWork() {
+    busyDepth = Math.max(0, busyDepth - 1);
+  }
+
+  window.addEventListener('beforeunload', function (event) {
+    if (!busyDepth) return;
+    event.preventDefault();
+    event.returnValue = 'Идёт обработка. Действительно обновить страницу?';
+    return event.returnValue;
+  });
 
   function formatBytes(bytes) {
     if (!bytes || bytes < 0) return '-';
@@ -904,6 +920,7 @@
 
     async function compress() {
       if (!jobs.length) return;
+      beginWork();
       showError(error, '');
       if (button) button.disabled = true;
       setFileList(false);
@@ -947,6 +964,7 @@
         clearProgress();
         showError(error, (e && e.message) || 'Не удалось сжать фото.');
       } finally {
+        endWork();
         renderControls();
         if (download) download.disabled = !activeJob() || !activeJob().blob;
         if (downloadAll) downloadAll.disabled = jobs.some(function (job) { return !job.blob; });
@@ -1339,6 +1357,7 @@
 
     async function exportVideo() {
       if (!file) return;
+      beginWork();
       setError('');
       if (exportBtn) { exportBtn.disabled = true; exportBtn.textContent = 'Экспортируем...'; }
       var start = Number(startSlider.value);
@@ -1442,6 +1461,7 @@
         setError((e && e.message) || 'Не удалось собрать видео. Попробуйте другой файл.');
         clearProgress();
       } finally {
+        endWork();
         if (exportBtn) { exportBtn.disabled = !file; exportBtn.textContent = 'Собрать MP4'; }
       }
     }
@@ -1648,6 +1668,8 @@
 
   function init() {
     updateDotColor();
+    initCursorField();
+    initCardTilt();
     initTheme();
     initAccount();
     var page = document.body.dataset.page;
