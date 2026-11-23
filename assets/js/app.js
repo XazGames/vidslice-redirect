@@ -94,6 +94,32 @@
     setTimeout(function () { wrap.classList.remove('is-open', 'is-closing'); }, 230);
   }
 
+  var scrollTimer = null;
+
+  function scrollToNode(node, delay) {
+    if (!node) return;
+    setTimeout(function () {
+      var doc = document.scrollingElement || document.documentElement;
+      var rect = node.getBoundingClientRect();
+      var max = Math.max(0, doc.scrollHeight - window.innerHeight);
+      var target = Math.max(0, Math.min(max, window.pageYOffset + rect.top - (window.innerHeight - rect.height) / 2));
+      var start = window.pageYOffset;
+      var distance = target - start;
+      if (Math.abs(distance) < 2) return;
+      if (scrollTimer) clearInterval(scrollTimer);
+      var started = performance.now();
+      scrollTimer = setInterval(function () {
+        var p = Math.min(1, (performance.now() - started) / 650);
+        var eased = 1 - Math.pow(1 - p, 3);
+        window.scrollTo(0, start + distance * eased);
+        if (p >= 1) {
+          clearInterval(scrollTimer);
+          scrollTimer = null;
+        }
+      }, 16);
+    }, delay || 0);
+  }
+
   function makePicker(cfg) {
     var wrap = document.createElement('div');
     wrap.className = 'picker';
@@ -397,6 +423,9 @@
     var downloadAll = $('photoDownloadAll');
     var result = $('photoResult');
     var error = $('photoError');
+    var progress = $('photoProgress');
+    var progressFill = $('photoProgressFill');
+    var progressText = $('photoProgressText');
     if (!input) return;
 
     var jobs = [];
@@ -454,8 +483,20 @@
       job.resultBytes = 0;
     }
 
+    function setProgress(value, text) {
+      if (progress) progress.classList.add('is-active');
+      if (progressFill) progressFill.style.width = Math.round(Math.max(0, Math.min(1, value)) * 100) + '%';
+      if (progressText) progressText.textContent = Math.round(Math.max(0, Math.min(1, value)) * 100) + '% ' + (text || '');
+    }
+
+    function clearProgress() {
+      if (progress) progress.classList.remove('is-active');
+      if (progressFill) progressFill.style.width = '0%';
+    }
+
     function invalidateResults() {
       jobs.forEach(resetResult);
+      clearProgress();
       if (result) result.classList.remove('is-active');
       if (download) download.disabled = true;
       if (downloadAll) downloadAll.disabled = true;
@@ -666,11 +707,19 @@
       invalidateResults();
       var done = 0;
       try {
+        setProgress(0.03, 'Готовим...');
+        scrollToNode(progress, 500);
         for (var i = 0; i < jobs.length; i++) {
-          if (button) button.textContent = 'Сжимаем... ' + (i + 1) + ' / ' + jobs.length;
+          var label = 'Сжимаем ' + (i + 1) + ' / ' + jobs.length;
+          if (button) button.textContent = label;
+          setProgress(0.05 + (i / jobs.length) * 0.85, label);
+          await new Promise(function (resolve) { setTimeout(resolve, 140); });
           await compressOne(jobs[i]);
           done++;
+          setProgress(0.05 + (done / jobs.length) * 0.85, label);
+          await new Promise(function (resolve) { setTimeout(resolve, 160); });
         }
+        setProgress(1, 'Готово');
         renderStats();
         if (result) {
           result.classList.add('is-active');
@@ -683,12 +732,14 @@
         }
         if (download) download.disabled = !activeJob() || !activeJob().blob;
         if (downloadAll) downloadAll.disabled = jobs.some(function (job) { return !job.blob; });
+        scrollToNode(download, 350);
         toast('Готово', done > 1 ? 'Сжато ' + done + ' фото - скачиваем' : 'Фото сжато - скачиваем');
         var ready = jobs.filter(function (job) { return job.blob; });
         ready.forEach(function (job, index) {
           setTimeout(function () { downloadJob(job); }, 120 + index * 260);
         });
       } catch (e) {
+        clearProgress();
         showError(error, (e && e.message) || 'Не удалось сжать фото.');
       } finally {
         renderControls();
@@ -861,9 +912,10 @@
     function setError(message) { showError(error, message); }
 
     function setProgress(value, text) {
+      var pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
       if (progress) progress.classList.add('is-active');
-      if (progressFill) progressFill.style.width = Math.round(Math.max(0, Math.min(1, value)) * 100) + '%';
-      if (progressText) progressText.textContent = text || '';
+      if (progressFill) progressFill.style.width = pct + '%';
+      if (progressText) progressText.textContent = pct + '% ' + (text || '');
     }
 
     function clearProgress() {
@@ -1019,7 +1071,8 @@
 
       try {
         setProgress(0.02, 'Загружаем движок...');
-        ffmpeg = await ensureEngine(function (p) { setProgress(0.02 + p * 0.22, 'Загружаем движок... ' + Math.round(p * 100) + '%'); });
+        scrollToNode(progress, 500);
+        ffmpeg = await ensureEngine(function (p) { setProgress(0.02 + p * 0.22, 'Загружаем движок...'); });
 
         setProgress(0.28, 'Подключаем видео...');
         mount = '/vidslice_' + Date.now().toString(36);
@@ -1076,6 +1129,7 @@
             (outputBlob.size < file.size ? ', вес уменьшен' : ', вес может отличаться от исходника');
         }
         if (download) download.disabled = false;
+        scrollToNode(download, 350);
         toast('Видео готово', formatBytes(outputBlob.size) + ' - MP4, ' + formatTime(length));
         for (var i = 0; i < cleanup.length; i++) {
           try { await ffmpeg.deleteFile(cleanup[i]); } catch (e) { /* ignore */ }
