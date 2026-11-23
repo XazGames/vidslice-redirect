@@ -1,0 +1,51 @@
+/* VidSlice - tiny decorative motion without pointer tracking. */
+
+@keyframes vs-title-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes vs-header-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -3px; }
+}
+
+.brand,
+.logo__word,
+.route-error__brand {
+  animation: vs-title-float 5.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+.landing__top {
+  animation: rise-in 0.6s var(--ease-out) backwards, vs-header-float 6s ease-in-out 0.6s infinite;
+  will-change: translate;
+}
+
+.toolbar {
+  animation: rise-in 0.55s var(--ease-out) backwards, vs-header-float 6s ease-in-out 0.55s infinite;
+  will-change: translate;
+}
+
+.topbar {
+  animation: vs-header-float 6s ease-in-out infinite;
+  will-change: translate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand,
+  .logo__word,
+  .route-error__brand,
+  .landing__top,
+  .toolbar,
+  .topbar {
+    animation: none;
+    will-change: auto;
+  }
+
+  .landing__top,
+  .toolbar,
+  .topbar {
+    translate: 0 0 !important;
+  }
+}
