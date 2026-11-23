@@ -13,6 +13,8 @@
   var PART_RE = /^video\.part-(\d{3})\.bin$/;
   var activeFile = null;
   var busy = 0;
+  var sharedLink = '';
+  var sharedFingerprint = '';
 
   function beginWork() { busy++; }
   function endWork() { busy = Math.max(0, busy - 1); }
@@ -27,6 +29,12 @@
   function byId(id) { return document.getElementById(id); }
   function query(sel) { return document.querySelector(sel); }
   function queryAll(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+
+  function markGlassBackdrops() {
+    queryAll('.modal').forEach(function (node) {
+      if (node.querySelector('.modal__backdrop')) node.classList.add('has-glass-backdrop');
+    });
+  }
 
   function isFullEditor() { return !!byId('fileInput') && !!byId('video'); }
   function isEditor() { return document.body.dataset.page === 'editor' && !!byId('videoInput'); }
@@ -230,11 +238,11 @@
     button.title = ready ? 'Создать ссылку на проект с видео' : 'Сначала загрузите видео';
   }
 
-  function makeModal() {
+  function makeModal(ready) {
     var old = byId('shareProjectModal');
     if (old) old.remove();
     var wrap = document.createElement('div');
-    wrap.className = 'modal share-modal';
+    wrap.className = 'modal share-modal' + (ready ? ' is-ready' : '');
     wrap.id = 'shareProjectModal';
     wrap.setAttribute('role', 'dialog');
     wrap.setAttribute('aria-modal', 'true');
@@ -243,10 +251,13 @@
       '<div class="modal__box share-modal__box">' +
       '  <div class="modal__head">' +
       '    <h2 class="modal__title" id="shareProjectTitle">Поделиться проектом</h2>' +
-      '    <button class="modal__close" type="button" data-share-close aria-label="Закрыть">&times;</button>' +
+      '    <button class="icon-btn icon-btn--tiny modal__close" type="button" data-share-close aria-label="Закрыть">' +
+      '      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>' +
+      '    </button>' +
       '  </div>' +
       '  <div class="share-modal__body">' +
       '    <p class="share-modal__hint">Видео и настройки монтажа будут загружены во временное хранилище на 24 часа. Ссылка доступна всем, у кого она есть.</p>' +
+      '    <p class="share-modal__ready-note">Ссылка уже создана. Отправьте её - проект откроется в редакторе.</p>' +
       '    <div class="share-modal__status" data-share-status>Готово к публикации.</div>' +
       '    <div class="share-modal__bar" aria-hidden="true"><i data-share-bar></i></div>' +
       '    <div class="share-modal__link" data-share-link-wrap hidden>' +
@@ -281,7 +292,12 @@
       toast('Нет видео', 'Сначала загрузите видео в редактор.', 'error');
       return;
     }
-    var modal = makeModal();
+    var key = info.name + '|' + info.blobUrl;
+    if (sharedLink && sharedFingerprint !== key) {
+      sharedLink = '';
+      sharedFingerprint = '';
+    }
+    var modal = makeModal(!!sharedLink);
     var statusNode = modal.querySelector('[data-share-status]');
     var bar = modal.querySelector('[data-share-bar]');
     var linkWrap = modal.querySelector('[data-share-link-wrap]');
@@ -293,6 +309,16 @@
       if (busy) return;
       modal.classList.add('is-closing');
       setTimeout(function () { modal.remove(); }, 230);
+    }
+
+    function showReady(link) {
+      linkInput.value = link;
+      linkWrap.hidden = false;
+      publishBtn.hidden = true;
+      nativeBtn.hidden = true;
+      statusNode.textContent = 'Готовая ссылка действует 24 часа.';
+      modal.classList.add('is-ready');
+      setTimeout(function () { modal.querySelector('[data-share-copy]').focus(); }, 30);
     }
 
     queryAll('[data-share-close]', modal).forEach(function (node) { node.addEventListener('click', close); });
@@ -359,10 +385,9 @@
         if (names.length !== parts.length) throw new Error('Проект загружен не полностью.');
 
         var link = PUBLIC_ORIGIN + '/' + folder.id;
-        linkInput.value = link;
-        linkWrap.hidden = false;
-        nativeBtn.hidden = false;
-        statusNode.textContent = 'Готово. Ссылка действует 24 часа.';
+        sharedLink = link;
+        sharedFingerprint = key;
+        showReady(link);
         bar.classList.remove('is-running');
 
         nativeBtn.onclick = function () {
@@ -391,7 +416,8 @@
     });
 
     modal.classList.add('is-open');
-    setTimeout(function () { modal.querySelector('[data-share-publish]').focus(); }, 30);
+    if (sharedLink) showReady(sharedLink);
+    else setTimeout(function () { modal.querySelector('[data-share-publish]').focus(); }, 30);
   }
 
   function addShareButton() {
@@ -651,6 +677,7 @@
   }
 
   function init() {
+    markGlassBackdrops();
     if (isErrorPage()) { restoreFromLink(); return; }
     if (isEditor() || isFullEditor()) { rememberFile(); addShareButton(); restoreSharedVideo(); }
   }
