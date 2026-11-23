@@ -3,6 +3,7 @@
   'use strict';
 
   var $ = function (id) { return document.getElementById(id); };
+  var dotColor = '255, 255, 255';
 
   function formatBytes(bytes) {
     if (!bytes || bytes < 0) return '-';
@@ -45,6 +46,11 @@
   }
 
   /* ---------- shared cursor field ---------- */
+
+  function updateDotColor() {
+    var value = getComputedStyle(document.documentElement).getPropertyValue('--dot-color').trim();
+    if (value) dotColor = value;
+  }
 
   function initCursorField() {
     var glow = document.querySelector('.cursor-glow');
@@ -97,7 +103,7 @@
         var y = d.y + (dy / dist) * pull + drift;
         ctx.beginPath();
         ctx.arc(x, y, d.r + force * 1.5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,' + (0.18 + force * 0.55) + ')';
+        ctx.fillStyle = 'rgba(' + dotColor + ',' + (0.18 + force * 0.55) + ')';
         ctx.fill();
       }
     }
@@ -174,7 +180,7 @@
       if (button) button.disabled = false;
       if (drop) {
         var label = drop.querySelector('[data-drop-label]');
-        if (label) label.textContent = job.name;
+        if (label) label.textContent = 'Заменить фото: ' + job.name;
       }
     }
 
@@ -314,6 +320,10 @@
     var resultText = $('videoResultText');
     var download = $('videoDownload');
     var error = $('videoError');
+    var trimBand = $('trimBand');
+    var trimRangeText = $('trimRangeText');
+    var trimStartLabel = $('trimStartLabel');
+    var trimEndLabel = $('trimEndLabel');
     if (!input) return;
 
     var CORE_URL = new URL('vendor/ffmpeg/ffmpeg-core.js', document.baseURI).href;
@@ -349,6 +359,23 @@
       endSlider.value = b;
       if (startValue) startValue.textContent = formatTime(a);
       if (endValue) endValue.textContent = formatTime(b);
+      if (trimRangeText) trimRangeText.textContent = formatTime(a) + ' - ' + formatTime(b);
+
+      if (trimBand && duration > 0) {
+        var startPct = Math.max(0, Math.min(100, (a / duration) * 100));
+        var endPct = Math.max(0, Math.min(100, (b / duration) * 100));
+        trimBand.style.left = startPct + '%';
+        trimBand.style.width = Math.max(0, endPct - startPct) + '%';
+        if (trimStartLabel) {
+          trimStartLabel.style.left = startPct + '%';
+          trimStartLabel.textContent = formatTime(a);
+        }
+        if (trimEndLabel) {
+          trimEndLabel.style.left = endPct + '%';
+          trimEndLabel.style.transform = 'translateX(-100%)';
+          trimEndLabel.textContent = formatTime(b);
+        }
+      }
     }
 
     function setFile(next) {
@@ -370,7 +397,7 @@
       if (name) name.textContent = next.name;
       if (drop) {
         var label = drop.querySelector('[data-drop-label]');
-        if (label) label.textContent = next.name;
+        if (label) label.textContent = 'Заменить видео: ' + next.name;
       }
       if (result) result.classList.remove('is-active');
       if (download) download.disabled = true;
@@ -574,8 +601,136 @@
     }
   }
 
+  /* ---------- theme and account ---------- */
+
+  function initTheme() {
+    var button = $('themeToggle');
+    if (!button) return;
+    button.addEventListener('click', function () {
+      var next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+      document.documentElement.dataset.theme = next;
+      try { localStorage.setItem('vidslice-theme', next); } catch (error) { /* ignore */ }
+      updateDotColor();
+    });
+  }
+
+  function initAccount() {
+    var button = $('accountBtn');
+    if (!button) return;
+
+    var modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.setAttribute('role', 'presentation');
+    modal.innerHTML = [
+      '<div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="accountTitle">',
+      '  <div class="modal__head">',
+      '    <div class="modal__title" id="accountTitle">Аккаунт</div>',
+      '    <button class="modal__close" type="button" data-account-close aria-label="Закрыть">&times;</button>',
+      '  </div>',
+      '  <div data-account-step="email">',
+      '    <p class="panel__hint">Введите email. В статической версии код показывается прямо здесь, письмо не отправляется.</p>',
+      '    <div class="field"><label for="accountEmail">Email</label><input id="accountEmail" type="email" autocomplete="email" placeholder="you@example.com"></div>',
+      '    <div class="actions"><button class="btn btn--primary" type="button" data-account-send>Получить код</button></div>',
+      '  </div>',
+      '  <div data-account-step="code" hidden>',
+      '    <p class="panel__hint">Код для <b data-account-email-label></b></p>',
+      '    <div class="demo-code" data-account-code></div>',
+      '    <div class="field"><label for="accountCode">Код из 4 цифр</label><input id="accountCode" type="text" inputmode="numeric" maxlength="4" placeholder="0000"></div>',
+      '    <div class="actions"><button class="btn btn--primary" type="button" data-account-verify>Войти</button><button class="btn" type="button" data-account-back>Назад</button></div>',
+      '  </div>',
+      '  <div data-account-step="done" hidden>',
+      '    <p class="panel__hint">Вы вошли как <b data-account-done-email></b>.</p>',
+      '    <div class="actions"><button class="btn" type="button" data-account-logout>Выйти</button></div>',
+      '  </div>',
+      '  <div class="error" data-account-error></div>',
+      '</div>'
+    ].join('');
+    document.body.appendChild(modal);
+
+    var avatar = button.querySelector('[data-account-avatar]');
+    var label = button.querySelector('[data-account-name]');
+    var errorNode = modal.querySelector('[data-account-error]');
+    var emailInput = modal.querySelector('#accountEmail');
+    var codeInput = modal.querySelector('#accountCode');
+    var generated = '';
+    var pendingEmail = '';
+
+    function storedEmail() {
+      try { return localStorage.getItem('vidslice-account') || ''; } catch (error) { return ''; }
+    }
+
+    function paintButton() {
+      var email = storedEmail();
+      if (avatar) avatar.textContent = email ? email.charAt(0).toUpperCase() : 'Г';
+      if (label) label.textContent = email || 'Войти';
+    }
+
+    function showStep(name) {
+      modal.querySelectorAll('[data-account-step]').forEach(function (node) {
+        node.hidden = node.getAttribute('data-account-step') !== name;
+      });
+      showError(errorNode, '');
+    }
+
+    function open() {
+      paintButton();
+      showStep(storedEmail() ? 'done' : 'email');
+      modal.classList.add('is-open');
+      var focusTarget = storedEmail() ? modal.querySelector('[data-account-logout]') : emailInput;
+      if (focusTarget) focusTarget.focus();
+    }
+
+    function close() { modal.classList.remove('is-open'); }
+
+    button.addEventListener('click', open);
+    modal.querySelector('[data-account-close]').addEventListener('click', close);
+    modal.addEventListener('click', function (event) { if (event.target === modal) close(); });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && modal.classList.contains('is-open')) close();
+    });
+
+    modal.querySelector('[data-account-send]').addEventListener('click', function () {
+      var email = (emailInput.value || '').trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        showError(errorNode, 'Введите корректный email.');
+        return;
+      }
+      pendingEmail = email;
+      generated = String(Math.floor(1000 + Math.random() * 9000));
+      modal.querySelector('[data-account-email-label]').textContent = email;
+      modal.querySelector('[data-account-code]').textContent = generated;
+      codeInput.value = '';
+      showStep('code');
+      codeInput.focus();
+    });
+
+    modal.querySelector('[data-account-back]').addEventListener('click', function () { showStep('email'); });
+
+    modal.querySelector('[data-account-verify]').addEventListener('click', function () {
+      if ((codeInput.value || '').trim() !== generated) {
+        showError(errorNode, 'Неверный код. Попробуйте ещё раз.');
+        return;
+      }
+      try { localStorage.setItem('vidslice-account', pendingEmail); } catch (error) { /* ignore */ }
+      modal.querySelector('[data-account-done-email]').textContent = pendingEmail;
+      paintButton();
+      showStep('done');
+    });
+
+    modal.querySelector('[data-account-logout]').addEventListener('click', function () {
+      try { localStorage.removeItem('vidslice-account'); } catch (error) { /* ignore */ }
+      paintButton();
+      showStep('email');
+    });
+
+    paintButton();
+  }
+
   function init() {
+    updateDotColor();
     initCursorField();
+    initTheme();
+    initAccount();
     var page = document.body.dataset.page;
     if (page === 'photo') initPhoto();
     if (page === 'editor') initEditor();
