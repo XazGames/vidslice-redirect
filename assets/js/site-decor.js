@@ -1,60 +1,42 @@
-/* VidSlice - a tiny GUI menu that shyly drifts away from the pointer. */
+/* VidSlice - the real interface gently leans away from the pointer. */
 (function () {
   'use strict';
 
   function init() {
-    if (document.querySelector('.vs-gui-menu')) return;
-
-    var menu = document.createElement('div');
-    menu.className = 'vs-gui-menu';
-    menu.setAttribute('aria-hidden', 'true');
-    menu.innerHTML = '<span></span><span></span><span></span>';
-    document.body.appendChild(menu);
-
-    var pointer = { x: -9999, y: -9999, active: false };
-    var pos = null;
-    var idleTimer = null;
+    var root = document.documentElement;
+    var pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2, active: false };
+    var current = { x: 0, y: 0 };
 
     window.addEventListener('pointermove', function (event) {
       pointer.x = event.clientX;
       pointer.y = event.clientY;
       pointer.active = true;
-      menu.classList.add('is-awake');
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(function () { menu.classList.remove('is-awake'); }, 900);
     }, { passive: true });
 
     window.addEventListener('pointerleave', function () {
       pointer.active = false;
-      menu.classList.remove('is-awake');
+    });
+
+    window.addEventListener('resize', function () {
+      if (!pointer.active) {
+        pointer.x = window.innerWidth / 2;
+        pointer.y = window.innerHeight / 2;
+      }
     });
 
     function tick() {
-      var now = Date.now() / 1000;
-      var baseX = Math.max(58, window.innerWidth * 0.08);
-      var baseY = Math.max(150, window.innerHeight * 0.28);
-      var x = baseX + Math.sin(now * 0.55) * 4;
-      var y = baseY + Math.cos(now * 0.42) * 3;
-
+      var nx = 0;
+      var ny = 0;
       if (pointer.active) {
-        var dx = x - pointer.x;
-        var dy = y - pointer.y;
-        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        if (dist < 180) {
-          var force = 1 - dist / 180;
-          var push = force * force * 30;
-          x += dx / dist * push;
-          y += dy / dist * push;
-        }
+        nx = (pointer.x / Math.max(window.innerWidth, 1) - 0.5) * 2;
+        ny = (pointer.y / Math.max(window.innerHeight, 1) - 0.5) * 2;
       }
-
-      x = Math.min(Math.max(x, 14), window.innerWidth - 106);
-      y = Math.min(Math.max(y, 14), window.innerHeight - 76);
-
-      if (!pos) pos = { x: x, y: y };
-      pos.x += (x - pos.x) * 0.08;
-      pos.y += (y - pos.y) * 0.08;
-      menu.style.transform = 'translate3d(' + pos.x.toFixed(1) + 'px,' + pos.y.toFixed(1) + 'px,0)';
+      var targetX = -nx * 5;
+      var targetY = -ny * 5;
+      current.x += (targetX - current.x) * 0.08;
+      current.y += (targetY - current.y) * 0.08;
+      root.style.setProperty('--gui-x', current.x.toFixed(2) + 'px');
+      root.style.setProperty('--gui-y', current.y.toFixed(2) + 'px');
     }
 
     tick();
