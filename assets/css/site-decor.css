@@ -16,8 +16,8 @@
 .shell,
 .topbar,
 .studio {
-  left: var(--gui-x, 0px);
-  top: var(--gui-y, 0px);
+  translate: 0 0;
+  will-change: translate;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -30,7 +30,7 @@
   .shell,
   .topbar,
   .studio {
-    left: 0 !important;
-    top: 0 !important;
+    translate: 0 0 !important;
+    will-change: auto;
   }
 }
