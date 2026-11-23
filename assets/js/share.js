@@ -176,6 +176,16 @@
     };
   }
 
+  function syncShareButton() {
+    var button = byId('shareProjectBtn');
+    if (!button) return;
+    var ready = !!currentVideoInfo();
+    if (button.hidden === !ready) return;
+    button.hidden = !ready;
+    button.disabled = !ready;
+    button.title = ready ? 'Создать ссылку на проект с видео' : 'Сначала загрузите видео';
+  }
+
   function makeModal() {
     var old = byId('shareProjectModal');
     if (old) old.remove();
@@ -342,6 +352,20 @@
     button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.4 10.8 7.2-4.1M8.4 13.2l7.2 4.1"/></svg><span>Поделиться</span>';
     host.insertBefore(button, host.firstChild);
     button.addEventListener('click', openShareModal);
+
+    button.hidden = true;
+    button.disabled = true;
+    button.title = 'Сначала загрузите видео';
+    syncShareButton();
+
+    [byId('video'), byId('videoPreview'), byId('fileInput'), byId('videoInput')]
+      .filter(Boolean)
+      .forEach(function (node) {
+        ['loadedmetadata', 'loadeddata', 'canplay', 'emptied', 'change'].forEach(function (type) {
+          node.addEventListener(type, function () { setTimeout(syncShareButton, 60); });
+        });
+      });
+    setInterval(syncShareButton, 600);
   }
 
   function clickSetting(attr, value) {
@@ -430,12 +454,25 @@
     }).catch(function () { /* без переданного файла редактор открывается как обычно */ });
   }
 
+  function showLoadingPage() {
+    document.documentElement.classList.add('is-project-loading');
+    document.documentElement.classList.remove('is-project-error');
+    var loader = byId('projectLoader');
+    if (loader) loader.setAttribute('aria-busy', 'true');
+    document.title = 'Загружаем проект - VidSlice';
+    statusNode('Соединяемся с хранилищем...');
+  }
+
   function showErrorPage(code, title, text, link) {
     var main = query('.error-page');
     if (!main) return;
+    document.documentElement.classList.remove('is-project-loading');
+    document.documentElement.classList.add('is-project-error');
+    var loader = byId('projectLoader');
+    if (loader) loader.setAttribute('aria-busy', 'false');
     var codeNode = query('.error-page__code');
-    var titleNode = query('h1');
-    var textNode = query('p');
+    var titleNode = query('.error-page h1');
+    var textNode = query('.error-page p');
     if (codeNode) codeNode.textContent = code;
     if (titleNode) titleNode.textContent = title;
     if (textNode) {
@@ -455,6 +492,10 @@
   }
 
   function statusNode(text) {
+    var loaderText = byId('projectLoaderText');
+    if (loaderText && document.documentElement.classList.contains('is-project-loading')) {
+      loaderText.textContent = text;
+    }
     var node = query('.route-error__status');
     if (!node) {
       node = document.createElement('div');
@@ -474,18 +515,18 @@
 
     var validId = PROJECT_ID_RE.test(segment);
     var link = location.href;
-    showErrorPage(
-      '404',
-      validId ? 'Проверяем ссылку' : 'Такой ссылки нет',
-      validId ? 'Проверьте ссылку. Возможно, срок её действия истёк.' : 'Проверьте адрес или вернитесь на главную.',
-      link
-    );
-
     if (!validId) {
+      showErrorPage(
+        '404',
+        'Такой ссылки нет',
+        'Проверьте адрес или вернитесь на главную.',
+        link
+      );
       statusNode('Ссылка не найдена.');
       return;
     }
 
+    showLoadingPage();
     var done = false;
     beginWork();
     try {
