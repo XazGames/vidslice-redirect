@@ -12,45 +12,59 @@
   will-change: transform;
 }
 
-.vs-mini {
+.vs-gui-menu {
   position: fixed;
   left: 0;
   top: 0;
   z-index: 1;
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
+  width: 92px;
+  height: 62px;
+  padding: 9px 10px;
   border: 1px solid var(--line-2, rgba(255, 255, 255, 0.2));
-  border-radius: 7px;
+  border-radius: 13px;
   background: var(--panel-strong, rgba(24, 25, 30, 0.94));
   color: var(--text, #f5f6f8);
-  font: 800 10px/1 var(--font, system-ui, sans-serif);
-  letter-spacing: 0.02em;
-  opacity: 0.4;
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.95);
+  opacity: 0.36;
   pointer-events: none;
-  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.9);
   transition: opacity 0.35s ease;
 }
 
-.vs-mini::after {
+.vs-gui-menu::before {
   content: "";
-  position: absolute;
-  inset: -6px;
-  border-radius: 12px;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.14), transparent 68%);
-  pointer-events: none;
+  display: block;
+  width: 26px;
+  height: 4px;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.45;
 }
 
-.vs-mini.is-awake { opacity: 0.62; }
+.vs-gui-menu span {
+  display: block;
+  height: 4px;
+  margin: 6px 0;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.24;
+}
+
+.vs-gui-menu span:nth-child(1) { width: 68%; }
+.vs-gui-menu span:nth-child(2) { width: 46%; }
+.vs-gui-menu span:nth-child(3) { width: 58%; }
+
+.vs-gui-menu.is-awake { opacity: 0.6; }
 
 @media (max-width: 820px) {
-  .vs-mini {
-    width: 14px;
-    height: 14px;
-    border-radius: 6px;
-    font-size: 8px;
-    opacity: 0.3;
+  .vs-gui-menu {
+    width: 70px;
+    height: 48px;
+    padding: 7px 8px;
+    border-radius: 11px;
+    opacity: 0.26;
   }
 }
 
@@ -61,7 +75,7 @@
     animation: none;
   }
 
-  .vs-mini {
+  .vs-gui-menu {
     display: none;
   }
 }
