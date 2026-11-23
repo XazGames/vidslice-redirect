@@ -1,0 +1,140 @@
+/* VidSlice - project sharing UI. */
+
+.share-project-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.share-project-btn svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.share-modal .modal__box {
+  width: min(480px, 100%);
+}
+
+.share-modal__body {
+  display: grid;
+  gap: 14px;
+}
+
+.share-modal__hint,
+.share-modal__note {
+  margin: 0;
+  color: var(--muted, #9aa0aa);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.share-modal__note {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.share-modal__status {
+  min-height: 20px;
+  color: var(--text, #f5f6f8);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.share-modal__bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(140, 145, 155, 0.18);
+}
+
+.share-modal__bar i {
+  display: block;
+  width: 34%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text, #f5f6f8);
+  opacity: 0;
+  transform: translateX(-110%);
+}
+
+.share-modal__bar.is-running i {
+  opacity: 1;
+  animation: vs-share-progress 1.1s ease-in-out infinite;
+}
+
+@keyframes vs-share-progress {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(310%); }
+}
+
+.share-modal__link label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted, #9aa0aa);
+  font-size: 12px;
+}
+
+.share-modal__row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-modal__row input {
+  min-width: 0;
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2, rgba(255, 255, 255, 0.14));
+  border-radius: 10px;
+  background: rgba(120, 125, 135, 0.1);
+  color: var(--text, #f5f6f8);
+  font: inherit;
+  font-size: 13px;
+}
+
+.share-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.share-modal__actions .btn:first-child {
+  margin-right: auto;
+}
+
+.error-page.route-error .route-error__link {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 6px;
+  color: var(--text, #f5f6f8);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  text-decoration: underline;
+  text-decoration-color: rgba(150, 155, 165, 0.6);
+  text-underline-offset: 3px;
+}
+
+.error-page.route-error .route-error__status {
+  margin: -12px auto 24px;
+  color: var(--muted, #9aa0aa);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+html[data-theme="light"] .share-modal__bar {
+  background: rgba(12, 14, 20, 0.1);
+}
+
+html[data-theme="light"] .share-modal__bar i {
+  background: #111318;
+}
+
+@media (max-width: 560px) {
+  .share-project-btn span { display: none; }
+  .share-modal__actions .btn:first-child { margin-right: 0; width: 100%; }
+  .share-modal__row { flex-direction: column; }
+}
