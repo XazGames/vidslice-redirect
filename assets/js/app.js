@@ -1092,6 +1092,7 @@
     var endValue = $('endValue');
     var quality = $('videoQuality');
     var compressToggle = $('videoCompress');
+    var modeSelect = $('exportMode');
     var exportBtn = $('exportBtn');
     var progress = $('videoProgress');
     var progressFill = $('videoProgressFill');
@@ -1130,6 +1131,20 @@
     var duration = 0;
 
     function setError(message) { showError(error, message); }
+
+    function applyMode() {
+      var mode = modeSelect ? modeSelect.value : 'optimal';
+      var manual = mode === 'manual';
+      if (quality) {
+        quality.disabled = !manual;
+        if (mode === 'fast') quality.value = '480';
+        else if (!manual) quality.value = 'source';
+      }
+      if (compressToggle) {
+        compressToggle.disabled = !manual;
+        compressToggle.checked = mode === 'fast';
+      }
+    }
 
     function setProgress(value, text) {
       var pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
@@ -1276,8 +1291,8 @@
       return "scale=w='min(" + cap[0] + ",iw)':h='min(" + cap[1] + ",ih)':force_original_aspect_ratio=decrease:flags=fast_bilinear," + even;
     }
 
-    function buildArgs(inputName, outputName, start, length) {
-      var filter = scaleFilter(quality ? quality.value : 'source');
+    function buildArgs(inputName, outputName, start, length, settings) {
+      var filter = scaleFilter(settings.preset);
       var args = [
         '-ss', start.toFixed(3),
         '-i', inputName,
@@ -1288,8 +1303,8 @@
       if (filter) args.push('-vf', filter);
       args.push(
         '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-crf', compressToggle && compressToggle.checked ? '30' : '24',
+        '-preset', settings.speed,
+        '-crf', settings.crf,
         '-pix_fmt', 'yuv420p',
         '-g', '60',
         '-max_muxing_queue_size', '1024',
@@ -1360,8 +1375,20 @@
 
         setProgress(0.40, 'Проверяем формат...');
         var codecs = await sniffCodecs(file);
-        var preset = quality ? quality.value : 'source';
-        var copyMode = preset === 'source' && !(compressToggle && compressToggle.checked) && codecs.h264;
+        var mode = modeSelect ? modeSelect.value : 'optimal';
+        var settings = { preset: 'source', crf: '24', speed: 'ultrafast' };
+        if (mode === 'fast') settings = { preset: '480', crf: '32', speed: 'ultrafast' };
+        else if (mode === 'quality') settings = { preset: 'source', crf: '18', speed: 'veryfast' };
+        else if (mode === 'manual') {
+          settings = {
+            preset: quality ? quality.value : 'source',
+            crf: compressToggle && compressToggle.checked ? '30' : '24',
+            speed: 'ultrafast'
+          };
+        }
+        var copyMode = mode !== 'quality' && codecs.h264 &&
+          (mode !== 'manual' || (settings.preset === 'source' && settings.crf === '24'));
+        var modeLabel = mode === 'fast' ? 'Быстро' : mode === 'quality' ? 'Качество' : mode === 'manual' ? 'Вручную' : 'Оптимальный';
         var stage = copyMode ? 'Копируем видео...' : 'Кодируем видео...';
         setProgress(0.44, stage);
 
@@ -1382,7 +1409,7 @@
         try {
           var runArgs = copyMode
             ? buildCopyArgs(inputPath, outputName, start, length, codecs)
-            : buildArgs(inputPath, outputName, start, length);
+            : buildArgs(inputPath, outputName, start, length, settings);
           await ffmpeg.exec(runArgs);
         } finally {
           ffmpeg.off('progress', onProgress);
@@ -1399,11 +1426,11 @@
         if (result) result.classList.add('is-active');
         if (resultText) {
           resultText.textContent = formatBytes(outputBlob.size) + ' - MP4, длительность ' + formatTime(length) +
-            (copyMode ? ', без перекодирования' : outputBlob.size < file.size ? ', вес уменьшен' : ', вес может отличаться от исходника');
+            ' - ' + modeLabel + (copyMode ? ', без перекодирования' : outputBlob.size < file.size ? ', вес уменьшен' : ', вес может отличаться от исходника');
         }
         if (download) download.disabled = false;
         scrollToNode(download, 350);
-        toast('Видео готово', formatBytes(outputBlob.size) + ' - MP4, ' + formatTime(length) + (copyMode ? ' - без перекодирования' : ''));
+        toast('Видео готово', formatBytes(outputBlob.size) + ' - MP4, ' + formatTime(length) + ' - ' + modeLabel + (copyMode ? ', без перекодирования' : ''));
         for (var i = 0; i < cleanup.length; i++) {
           try { await ffmpeg.deleteFile(cleanup[i]); } catch (e) { /* ignore */ }
         }
@@ -1448,6 +1475,8 @@
       }
     });
     [startSlider, endSlider].forEach(function (slider) { if (slider) slider.addEventListener('input', updateTrim); });
+    if (modeSelect) modeSelect.addEventListener('change', applyMode);
+    applyMode();
     if (exportBtn) exportBtn.addEventListener('click', exportVideo);
     if (download) download.addEventListener('click', function () {
       if (!outputBlob) return;
