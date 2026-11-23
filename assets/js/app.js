@@ -1243,17 +1243,24 @@
       return enginePromise;
     }
 
-    async function probeCodecs(ffmpeg, inputName) {
-      var logs = [];
-      var handler = function (event) { if (event.message) logs.push(event.message); };
-      ffmpeg.on('log', handler);
-      try { await ffmpeg.exec(['-i', inputName]); } catch (e) { /* probe always exits non-zero */ }
-      ffmpeg.off('log', handler);
-      var text = logs.join('\n');
+    async function sniffCodecs(source) {
+      var bytes = [];
+      var head = await source.slice(0, Math.min(source.size, 1024 * 1024)).arrayBuffer();
+      bytes.push(new Uint8Array(head));
+      if (source.size > 1024 * 1024) {
+        var tail = await source.slice(source.size - 1024 * 1024).arrayBuffer();
+        bytes.push(new Uint8Array(tail));
+      }
+      var text = '';
+      for (var i = 0; i < bytes.length; i++) {
+        for (var j = 0; j < bytes[i].length; j += 8192) {
+          text += String.fromCharCode.apply(null, bytes[i].subarray(j, j + 8192));
+        }
+      }
       return {
-        h264: /Video:\s*h264\b/i.test(text),
-        aac: /Audio:\s*aac\b/i.test(text),
-        audio: /Audio:/.test(text)
+        h264: /avc1|avcC/.test(text),
+        aac: /mp4a/.test(text),
+        audio: /mp4a|sowt|enca/.test(text)
       };
     }
 
@@ -1352,7 +1359,7 @@
         }
 
         setProgress(0.40, 'Проверяем формат...');
-        var codecs = await probeCodecs(ffmpeg, inputPath);
+        var codecs = await sniffCodecs(file);
         var preset = quality ? quality.value : 'source';
         var copyMode = preset === 'source' && !(compressToggle && compressToggle.checked) && codecs.h264;
         var stage = copyMode ? 'Копируем видео...' : 'Кодируем видео...';
@@ -1476,6 +1483,12 @@
         end: Number(endSlider.value)
       }).then(function () { location.href = href; }, function () { location.href = href; });
     });
+
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(function () { ensureEngine(function () { }).catch(function () { }); });
+    } else {
+      setTimeout(function () { ensureEngine(function () { }).catch(function () { }); }, 1200);
+    }
   }
 
   /* ---------- theme and account ---------- */
