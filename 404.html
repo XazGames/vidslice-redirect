@@ -5,24 +5,53 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Страница не найдена - VidSlice</title>
   <meta name="theme-color" content="#050506">
+  <script>
+    (function () {
+      var raw = '';
+      try { raw = decodeURIComponent(location.pathname || ''); } catch (error) { raw = location.pathname || ''; }
+      var segment = raw.replace(/^\/+|\/+$/g, '');
+      var isProjectLink = /^[A-Za-z0-9_-]{8,20}$/.test(segment) && segment.indexOf('/') === -1 && segment.indexOf('.') === -1;
+      if (isProjectLink) {
+        document.documentElement.classList.add('is-project-loading');
+        document.title = 'Загружаем проект - VidSlice';
+      }
+    })();
+  </script>
   <link rel="icon" href="/assets/img/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/css/app.css?v=20261123g14">
   <link rel="stylesheet" href="/assets/css/mobile-sheets.css?v=20261123m4">
   <link rel="stylesheet" href="/assets/css/site-decor-v2.css?v=20261123d11">
-  <link rel="stylesheet" href="/assets/css/share.css?v=20261123s1">
+  <link rel="stylesheet" href="/assets/css/share.css?v=20261124s3">
   <script src="/assets/js/app.js?v=20261123g20" defer></script>
   <script src="/assets/js/mobile-sheets.js?v=20261123m4" defer></script>
   <script src="/assets/js/site-decor.js?v=20261123d10" defer></script>
-  <script src="/assets/js/share.js?v=20261123s1" defer></script>
+  <script src="/assets/js/share.js?v=20261124s3" defer></script>
 </head>
 <body data-page="error">
   <div class="cursor-glow" aria-hidden="true"></div>
   <canvas class="dot-field" aria-hidden="true"></canvas>
+
   <main class="shell error-page">
     <div class="error-page__code">404</div>
     <h1>Такой страницы нет</h1>
     <p>Возможно, ссылка устарела. Вернитесь на главную и выберите инструмент заново.</p>
     <div class="actions"><a class="btn btn--primary" href="/">На главную</a></div>
   </main>
+
+  <div class="project-loader" id="projectLoader" role="status" aria-live="polite" aria-busy="false" aria-label="Загрузка проекта">
+    <div class="project-loader__card">
+      <div class="project-loader__orbit" aria-hidden="true">
+        <span class="project-loader__ring"></span>
+        <span class="project-loader__ring project-loader__ring--two"></span>
+        <span class="project-loader__core">V</span>
+        <span class="project-loader__spark"></span>
+      </div>
+      <div class="project-loader__eyebrow">VidSlice</div>
+      <h1 class="project-loader__title">Загружаем проект</h1>
+      <p class="project-loader__text" id="projectLoaderText">Соединяемся с хранилищем...</p>
+      <div class="project-loader__track" aria-hidden="true"><i></i></div>
+      <div class="project-loader__hint">Видео и настройки появятся в редакторе автоматически</div>
+    </div>
+  </div>
 </body>
 </html>
