@@ -9001,3 +9001,127 @@ html[data-static="true"] #botGate {
     display: none;
   }
 }
+
+/* ---------- VidSlice motion pack ---------- */
+
+@keyframes vs-rise-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.985); filter: blur(6px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+@keyframes vs-toast-in {
+  from { opacity: 0; transform: translateY(26px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes vs-toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(16px) scale(0.92); }
+}
+
+@keyframes vs-icon-pop { from { transform: scale(0); } to { transform: scale(1); } }
+@keyframes vs-check-draw { to { stroke-dashoffset: 0; } }
+@keyframes vs-toast-life { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+.topbar { animation: vs-rise-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.welcome { animation: vs-rise-in 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.08s backwards; }
+.workspace { animation: vs-rise-in 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.12s backwards; }
+.launch-card { animation: vs-rise-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.launch-card:nth-child(2) { animation-delay: 0.08s; }
+.launch-card:nth-child(3) { animation-delay: 0.16s; }
+
+.vs-toast-stack {
+  position: fixed;
+  left: 22px;
+  bottom: 22px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+.vs-toast {
+  pointer-events: auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 270px;
+  max-width: min(430px, calc(100vw - 44px));
+  padding: 13px 16px 15px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(24, 25, 30, 0.94);
+  color: #f5f6f8;
+  box-shadow: 0 34px 90px -34px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  cursor: pointer;
+  animation: vs-toast-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.vs-toast.is-leaving { animation: vs-toast-out 0.3s cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+.vs-toast__icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(88, 214, 141, 0.16);
+  color: #58d68d;
+  animation: vs-icon-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.12s backwards;
+}
+
+.vs-toast__icon svg { width: 16px; height: 16px; }
+.vs-toast__icon svg path {
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+  animation: vs-check-draw 0.4s ease-out 0.3s forwards;
+}
+
+.vs-toast__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vs-toast__title { font-size: 13px; font-weight: 700; }
+.vs-toast__sub {
+  color: #9ca0ab;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vs-toast__life {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: #58d68d;
+  opacity: 0.65;
+  transform-origin: left;
+  animation: vs-toast-life 4.2s linear forwards;
+}
+
+html[data-theme="light"] .vs-toast {
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(12, 14, 20, 0.2);
+  color: #111318;
+}
+
+html[data-theme="light"] .vs-toast__sub { color: #626876; }
+
+@media (max-width: 640px) {
+  .vs-toast-stack { left: 12px; right: 12px; bottom: 12px; }
+  .vs-toast { min-width: 0; max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar, .welcome, .workspace, .launch-card, .vs-toast, .vs-toast__icon, .vs-toast__icon svg path, .vs-toast__life {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
