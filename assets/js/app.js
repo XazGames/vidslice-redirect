@@ -28,6 +28,13 @@
     return 'jpg';
   }
 
+  function formatLabel(type) {
+    if (type === 'image/png') return 'PNG';
+    if (type === 'image/webp') return 'WebP';
+    if (type === 'image/jpeg') return 'JPEG';
+    return 'выбранный формат';
+  }
+
   function showError(node, message) {
     if (!node) return;
     node.textContent = message || '';
@@ -807,26 +814,16 @@
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
 
-      var alpha = hasAlpha(ctx, w, h);
       var requested = format ? format.value : 'image/jpeg';
       var q = Number(quality ? quality.value : 80) / 100;
-      var types = [requested];
-      if (requested !== 'image/webp') types.push('image/webp');
-      if (alpha && requested !== 'image/png') types.push('image/png');
-      if (!alpha && requested !== 'image/jpeg') types.push('image/jpeg');
+      var blob = await encode(canvas, requested, q);
+      if (!blob) throw new Error('Браузер не смог сохранить результат.');
+      if (!blob.type) blob = new Blob([blob], { type: requested });
 
-      var best = null;
-      for (var i = 0; i < types.length; i++) {
-        var blob = await encode(canvas, types[i], q);
-        if (blob && (!best || blob.size < best.blob.size)) best = { blob: blob, type: types[i] };
-      }
-      if (!best) throw new Error('Браузер не смог сохранить результат.');
-
-      var smaller = best.blob.size < job.file.size;
-      job.blob = smaller ? best.blob : job.file;
-      job.resultType = smaller ? best.type : (job.file.type || 'image/jpeg');
-      job.resultBytes = job.blob.size;
-      job.resultUrl = URL.createObjectURL(job.blob);
+      job.blob = blob;
+      job.resultType = requested;
+      job.resultBytes = blob.size;
+      job.resultUrl = URL.createObjectURL(blob);
     }
 
     async function compress() {
@@ -854,9 +851,10 @@
           result.classList.add('is-active');
           var text = result.querySelector('[data-result-text]');
           if (text) {
+            var label = formatLabel(format ? format.value : 'image/jpeg');
             text.textContent = done > 1
-              ? 'Готово ' + done + ' фото. Кадр учтён, формат результата подобран автоматически.'
-              : 'Кадр учтён, формат результата подобран автоматически.';
+              ? 'Готово ' + done + ' фото. Кадр учтён, формат ' + label + ' сохранён.'
+              : 'Кадр учтён, формат ' + label + ' сохранён.';
           }
         }
         if (download) download.disabled = !activeJob() || !activeJob().blob;
