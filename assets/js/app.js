@@ -599,7 +599,11 @@
         }
         if (download) download.disabled = !activeJob() || !activeJob().blob;
         if (downloadAll) downloadAll.disabled = jobs.some(function (job) { return !job.blob; });
-        toast('Готово', done > 1 ? 'Сжато ' + done + ' фото' : 'Фото сжато - можно скачивать');
+        toast('Готово', done > 1 ? 'Сжато ' + done + ' фото - скачиваем' : 'Фото сжато - скачиваем');
+        var ready = jobs.filter(function (job) { return job.blob; });
+        ready.forEach(function (job, index) {
+          setTimeout(function () { downloadJob(job); }, 120 + index * 260);
+        });
       } catch (e) {
         showError(error, (e && e.message) || 'Не удалось сжать фото.');
       } finally {

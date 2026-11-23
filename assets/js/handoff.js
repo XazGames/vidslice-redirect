@@ -95,6 +95,86 @@
     return pad(h) + ':' + pad(m) + ':' + pad(s) + '.' + String(ms).padStart(3, '0');
   }
 
+  var fragmentActive = false;
+  var lastFragmentKey = '';
+
+  function parseTime(value) {
+    var parts = String(value == null ? '' : value).trim().replace(',', '.').split(':');
+    if (!parts.length || parts.length > 3) return NaN;
+    var total = 0;
+    for (var i = 0; i < parts.length; i++) {
+      var n = parseFloat(parts[i]);
+      if (!isFinite(n)) return NaN;
+      total = total * 60 + n;
+    }
+    return total;
+  }
+
+  function currentRange() {
+    var startInput = document.getElementById('startInput');
+    var endInput = document.getElementById('endInput');
+    if (!startInput || !endInput) return null;
+    var a = parseTime(startInput.value);
+    var b = parseTime(endInput.value);
+    if (!isFinite(a) || !isFinite(b)) {
+      a = Number(document.getElementById('handleStart').getAttribute('aria-valuenow'));
+      b = Number(document.getElementById('handleEnd').getAttribute('aria-valuenow'));
+    }
+    if (!isFinite(a) || !isFinite(b) || b <= a + 0.02) return null;
+    return { start: a, end: b };
+  }
+
+  function applyFragment(announce) {
+    var video = document.getElementById('video');
+    var range = currentRange();
+    if (!video || !range) return;
+    fragmentActive = true;
+    try { video.currentTime = Math.max(range.start, Math.min(range.end - 0.05, video.currentTime)); } catch (e) { /* ignore */ }
+    var key = range.start.toFixed(2) + '-' + range.end.toFixed(2);
+    if (announce && key !== lastFragmentKey) {
+      lastFragmentKey = key;
+      vsToast('Фрагмент обрезан', 'Осталось ' + formatTime(range.end - range.start));
+    }
+  }
+
+  function initFragmentPreview() {
+    var video = document.getElementById('video');
+    var handles = [document.getElementById('handleStart'), document.getElementById('handleEnd')];
+    if (!video || !handles[0] || !handles[1]) return;
+    var dragging = false;
+    var moved = false;
+
+    handles.forEach(function (handle) {
+      handle.addEventListener('pointerdown', function () { dragging = true; moved = false; }, true);
+      handle.addEventListener('keydown', function (e) {
+        if (/^(Arrow|Page|Home|End)/.test(e.key)) moved = true;
+      }, true);
+      handle.addEventListener('keyup', function (e) {
+        if (!moved) return;
+        moved = false;
+        setTimeout(function () { applyFragment(true); }, 50);
+      }, true);
+    });
+
+    window.addEventListener('pointermove', function () { if (dragging) moved = true; }, { passive: true });
+    window.addEventListener('pointerup', function () {
+      if (!dragging) return;
+      dragging = false;
+      if (moved) setTimeout(function () { applyFragment(true); }, 50);
+      moved = false;
+    });
+
+    video.addEventListener('timeupdate', function () {
+      if (!fragmentActive) return;
+      var range = currentRange();
+      if (!range) return;
+      var t = video.currentTime;
+      if (t < range.start - 0.05 || t >= range.end - 0.03) {
+        try { video.currentTime = range.start; } catch (e) { /* ignore */ }
+      }
+    });
+  }
+
   function applyTrim(data) {
     var video = document.getElementById('video');
     var startInput = document.getElementById('startInput');
@@ -143,6 +223,7 @@
     (function wait() {
       if (applyTrim(data)) {
         handoffActive = false;
+        applyFragment(false);
         vsToast('Видео перенесено', 'Границы обрезки сохранены');
         return;
       }
@@ -152,6 +233,7 @@
   }
 
   watchUploads();
+  initFragmentPreview();
 
   openDb().then(function (db) {
     return readPending(db).then(function (data) {
