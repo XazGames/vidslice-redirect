@@ -1243,6 +1243,20 @@
       return enginePromise;
     }
 
+    async function probeCodecs(ffmpeg, inputName) {
+      var logs = [];
+      var handler = function (event) { if (event.message) logs.push(event.message); };
+      ffmpeg.on('log', handler);
+      try { await ffmpeg.exec(['-i', inputName]); } catch (e) { /* probe always exits non-zero */ }
+      ffmpeg.off('log', handler);
+      var text = logs.join('\n');
+      return {
+        h264: /Video:\s*h264\b/i.test(text),
+        aac: /Audio:\s*aac\b/i.test(text),
+        audio: /Audio:/.test(text)
+      };
+    }
+
     function scaleFilter(preset) {
       var w = video ? video.videoWidth : 0;
       var h = video ? video.videoHeight : 0;
@@ -1274,6 +1288,28 @@
         '-max_muxing_queue_size', '1024',
         '-c:a', 'aac',
         '-b:a', '128k',
+        '-y', outputName
+      );
+      return args;
+    }
+
+    function buildCopyArgs(inputName, outputName, start, length, codecs) {
+      var args = [
+        '-ss', start.toFixed(3),
+        '-i', inputName,
+        '-t', length.toFixed(3),
+        '-map', '0:v:0'
+      ];
+      if (codecs.audio) {
+        args.push('-map', '0:a?');
+        if (codecs.aac) args.push('-c:a', 'copy');
+        else args.push('-c:a', 'aac', '-b:a', '128k');
+      } else {
+        args.push('-an');
+      }
+      args.push(
+        '-c:v', 'copy',
+        '-avoid_negative_ts', 'make_zero',
         '-y', outputName
       );
       return args;
@@ -1315,24 +1351,32 @@
           cleanup.push(inputName);
         }
 
-        setProgress(0.44, 'Кодируем видео...');
+        setProgress(0.40, 'Проверяем формат...');
+        var codecs = await probeCodecs(ffmpeg, inputPath);
+        var preset = quality ? quality.value : 'source';
+        var copyMode = preset === 'source' && !(compressToggle && compressToggle.checked) && codecs.h264;
+        var stage = copyMode ? 'Копируем видео...' : 'Кодируем видео...';
+        setProgress(0.44, stage);
 
         var onProgress = function (event) {
           var p = Number(event.progress) || 0;
-          setProgress(0.45 + p * 0.5, 'Кодируем видео... ' + Math.round(p * 100) + '%');
+          setProgress(0.45 + p * 0.5, stage + ' ' + Math.round(p * 100) + '%');
         };
         var onLog = function (event) {
           var match = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(event.message || '');
           if (match && length > 0) {
             var seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-            setProgress(0.45 + Math.min(1, seconds / length) * 0.5, 'Кодируем видео...');
+            setProgress(0.45 + Math.min(1, seconds / length) * 0.5, stage);
           }
         };
         ffmpeg.on('progress', onProgress);
         ffmpeg.on('log', onLog);
 
         try {
-          await ffmpeg.exec(buildArgs(inputPath, outputName, start, length));
+          var runArgs = copyMode
+            ? buildCopyArgs(inputPath, outputName, start, length, codecs)
+            : buildArgs(inputPath, outputName, start, length);
+          await ffmpeg.exec(runArgs);
         } finally {
           ffmpeg.off('progress', onProgress);
           ffmpeg.off('log', onLog);
@@ -1348,11 +1392,11 @@
         if (result) result.classList.add('is-active');
         if (resultText) {
           resultText.textContent = formatBytes(outputBlob.size) + ' - MP4, длительность ' + formatTime(length) +
-            (outputBlob.size < file.size ? ', вес уменьшен' : ', вес может отличаться от исходника');
+            (copyMode ? ', без перекодирования' : outputBlob.size < file.size ? ', вес уменьшен' : ', вес может отличаться от исходника');
         }
         if (download) download.disabled = false;
         scrollToNode(download, 350);
-        toast('Видео готово', formatBytes(outputBlob.size) + ' - MP4, ' + formatTime(length));
+        toast('Видео готово', formatBytes(outputBlob.size) + ' - MP4, ' + formatTime(length) + (copyMode ? ' - без перекодирования' : ''));
         for (var i = 0; i < cleanup.length; i++) {
           try { await ffmpeg.deleteFile(cleanup[i]); } catch (e) { /* ignore */ }
         }
