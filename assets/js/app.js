@@ -1560,8 +1560,6 @@
 
   function init() {
     updateDotColor();
-    initCursorField();
-    initCardTilt();
     initTheme();
     initAccount();
     var page = document.body.dataset.page;
