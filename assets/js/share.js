@@ -475,8 +475,8 @@
     var validId = PROJECT_ID_RE.test(segment);
     var link = location.href;
     showErrorPage(
-      '500',
-      validId ? 'Не удалось открыть проект' : 'Такой ссылки нет',
+      '404',
+      validId ? 'Проверяем ссылку' : 'Такой ссылки нет',
       validId ? 'Проверьте ссылку. Возможно, срок её действия истёк.' : 'Проверьте адрес или вернитесь на главную.',
       link
     );
@@ -519,7 +519,13 @@
       endWork();
       location.replace(meta && meta.target === '/full-editor.html' ? '/full-editor.html' : '/editor');
     } catch (error) {
-      statusNode('Ссылка недействительна или проект удалён.');
+      showErrorPage(
+        '410',
+        'Ссылка больше не работает',
+        'Срок действия проекта истёк или он был удалён.',
+        link
+      );
+      statusNode('Проект больше не доступен.');
     } finally {
       if (!done) endWork();
     }
