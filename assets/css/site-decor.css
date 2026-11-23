@@ -1,0 +1,67 @@
+/* VidSlice - tiny decorative motion. */
+
+@keyframes vs-title-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.brand,
+.logo__word,
+.route-error__brand {
+  animation: vs-title-float 5.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+.vs-mini {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2, rgba(255, 255, 255, 0.2));
+  border-radius: 7px;
+  background: var(--panel-strong, rgba(24, 25, 30, 0.94));
+  color: var(--text, #f5f6f8);
+  font: 800 10px/1 var(--font, system-ui, sans-serif);
+  letter-spacing: 0.02em;
+  opacity: 0.4;
+  pointer-events: none;
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.9);
+  transition: opacity 0.35s ease;
+}
+
+.vs-mini::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 12px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.14), transparent 68%);
+  pointer-events: none;
+}
+
+.vs-mini.is-awake { opacity: 0.62; }
+
+@media (max-width: 820px) {
+  .vs-mini {
+    width: 14px;
+    height: 14px;
+    border-radius: 6px;
+    font-size: 8px;
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand,
+  .logo__word,
+  .route-error__brand {
+    animation: none;
+  }
+
+  .vs-mini {
+    display: none;
+  }
+}
