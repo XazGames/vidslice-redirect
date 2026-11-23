@@ -45,6 +45,112 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
   }
 
+  /* ---------- shared UI helpers ---------- */
+
+  function makePicker(cfg) {
+    var wrap = document.createElement('div');
+    wrap.className = 'picker';
+    wrap.id = cfg.id;
+    wrap.innerHTML = [
+      '<div class="picker__box" role="dialog" aria-modal="true" aria-labelledby="' + cfg.id + 'Title">',
+      '  <div class="picker__head">',
+      '    <h2 id="' + cfg.id + 'Title">' + cfg.title + '</h2>',
+      '    <button class="modal__close" type="button" data-picker-close aria-label="Закрыть">&times;</button>',
+      '  </div>',
+      '  <label class="drop drop--picker" data-picker-drop>',
+      '    <input type="file" ' + (cfg.multiple ? 'multiple ' : '') + 'accept="' + cfg.accept + '" data-picker-input hidden>',
+      '    <div>',
+      '      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15.5v2.2A2.3 2.3 0 0 0 6.3 20h11.4a2.3 2.3 0 0 0 2.3-2.3v-2.2"/></svg>',
+      '      <strong>' + cfg.title + '</strong><span>' + cfg.hint + '</span>',
+      '    </div>',
+      '  </label>',
+      '  <div class="picker__foot"><button class="btn" type="button" data-picker-close>Отмена</button></div>',
+      '</div>'
+    ].join('');
+    document.body.appendChild(wrap);
+
+    var input = wrap.querySelector('[data-picker-input]');
+    var drop = wrap.querySelector('[data-picker-drop]');
+
+    function close() { wrap.classList.remove('is-open'); }
+    function take(files) {
+      var list = files && Array.prototype.slice.call(files);
+      if (!list || !list.length) return;
+      cfg.onFiles(list);
+      close();
+      input.value = '';
+    }
+
+    input.addEventListener('change', function () { take(input.files); });
+    ['dragenter', 'dragover'].forEach(function (type) {
+      drop.addEventListener(type, function (e) { e.preventDefault(); drop.classList.add('is-over'); });
+    });
+    ['dragleave', 'drop'].forEach(function (type) {
+      drop.addEventListener(type, function (e) { e.preventDefault(); drop.classList.remove('is-over'); });
+    });
+    drop.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) take(e.dataTransfer.files);
+    });
+    wrap.querySelectorAll('[data-picker-close]').forEach(function (node) {
+      node.addEventListener('click', close);
+    });
+    wrap.addEventListener('click', function (e) { if (e.target === wrap) close(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && wrap.classList.contains('is-open')) close();
+    });
+
+    return {
+      open: function () { wrap.classList.add('is-open'); input.focus(); },
+      close: close
+    };
+  }
+
+  function initCardTilt() {
+    var cards = document.querySelectorAll('.card');
+    if (!cards.length) return;
+    cards.forEach(function (card) {
+      card.addEventListener('pointermove', function (e) {
+        var r = card.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        var px = (e.clientX - r.left) / r.width;
+        var py = (e.clientY - r.top) / r.height;
+        var rx = (0.5 - py) * 11;
+        var ry = (px - 0.5) * 13;
+        card.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
+        card.style.setProperty('--my', (py * 100).toFixed(1) + '%');
+        card.style.transform = 'perspective(900px) rotateX(' + rx.toFixed(2) + 'deg) rotateY(' + ry.toFixed(2) + 'deg) translateY(-8px) scale(1.015)';
+      }, { passive: true });
+      card.addEventListener('pointerleave', function () {
+        card.style.transform = '';
+        card.style.removeProperty('--mx');
+        card.style.removeProperty('--my');
+      });
+    });
+  }
+
+  function openHandoffDb() {
+    return new Promise(function (resolve, reject) {
+      if (!window.indexedDB) { reject(new Error('IndexedDB недоступен')); return; }
+      var request = indexedDB.open('vidslice-handoff', 1);
+      request.onupgradeneeded = function () {
+        if (!request.result.objectStoreNames.contains('pending')) request.result.createObjectStore('pending');
+      };
+      request.onsuccess = function () { resolve(request.result); };
+      request.onerror = function () { reject(request.error); };
+    });
+  }
+
+  function saveHandoff(data) {
+    return openHandoffDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction('pending', 'readwrite');
+        tx.objectStore('pending').put(data, 'video');
+        tx.oncomplete = function () { db.close(); resolve(); };
+        tx.onerror = function () { db.close(); reject(tx.error); };
+      });
+    });
+  }
+
   /* ---------- shared cursor field ---------- */
 
   function updateDotColor() {
@@ -136,8 +242,18 @@
 
   function initPhoto() {
     var input = $('photoInput');
-    var drop = $('photoDrop');
     var preview = $('photoPreview');
+    var stage = $('photoStage');
+    var cropBox = $('cropBox');
+    var cropHandle = $('cropHandle');
+    var cropRow = $('cropRow');
+    var cropRatio = $('photoCropRatio');
+    var cropReset = $('photoCropReset');
+    var drop = $('photoDrop');
+    var replaceBtn = $('photoReplace');
+    var addBtn = $('photoAdd');
+    var removeBtn = $('photoRemove');
+    var thumbs = $('photoThumbs');
     var before = $('photoBefore');
     var after = $('photoAfter');
     var saving = $('photoSaving');
@@ -147,42 +263,28 @@
     var size = $('photoSize');
     var button = $('photoCompress');
     var download = $('photoDownload');
+    var downloadAll = $('photoDownloadAll');
     var result = $('photoResult');
     var error = $('photoError');
     if (!input) return;
 
-    var job = { file: null, blob: null, name: '', url: '', resultType: '' };
+    var jobs = [];
+    var active = -1;
+    function defaultCrop() { return { x: 0.1, y: 0.1, w: 0.8, h: 0.8, ratio: 'free' }; }
+    function storeCrop() { var job = activeJob(); if (job) job.crop = Object.assign({}, crop); }
+    var crop = defaultCrop();
+    var drag = null;
 
-    function resetResult() {
-      if (job.url) URL.revokeObjectURL(job.url);
-      job.url = '';
-      job.blob = null;
-      if (result) result.classList.remove('is-active');
-      if (download) download.disabled = true;
-      if (after) after.textContent = '-';
-      if (saving) saving.textContent = '-';
-    }
+    var picker = makePicker({
+      id: 'photoPicker',
+      title: 'Загрузить фото',
+      hint: 'Можно выбрать несколько файлов сразу - JPEG, PNG, WebP',
+      accept: 'image/jpeg,image/png,image/webp',
+      multiple: true,
+      onFiles: addFiles
+    });
 
-    function setFile(file) {
-      if (!file || !file.type || file.type.indexOf('image/') !== 0) {
-        showError(error, 'Нужен файл JPEG, PNG или WebP.');
-        return;
-      }
-      showError(error, '');
-      resetResult();
-      job.file = file;
-      job.name = file.name || 'photo.' + extFor(file.type);
-      if (preview) {
-        preview.hidden = false;
-        preview.src = URL.createObjectURL(file);
-      }
-      if (before) before.textContent = formatBytes(file.size);
-      if (button) button.disabled = false;
-      if (drop) {
-        var label = drop.querySelector('[data-drop-label]');
-        if (label) label.textContent = 'Заменить фото: ' + job.name;
-      }
-    }
+    function activeJob() { return active >= 0 ? jobs[active] : null; }
 
     function loadImage(file) {
       return new Promise(function (resolve, reject) {
@@ -211,81 +313,273 @@
       return new Promise(function (resolve) { canvas.toBlob(resolve, type, q); });
     }
 
-    async function compress() {
-      if (!job.file) return;
+    function resetResult(job) {
+      if (!job) return;
+      if (job.resultUrl) URL.revokeObjectURL(job.resultUrl);
+      job.resultUrl = '';
+      job.blob = null;
+      job.resultType = '';
+      job.resultBytes = 0;
+    }
+
+    function invalidateResults() {
+      jobs.forEach(resetResult);
+      if (result) result.classList.remove('is-active');
+      if (download) download.disabled = true;
+      if (downloadAll) downloadAll.disabled = true;
+      if (after) after.textContent = '-';
+      if (saving) saving.textContent = '-';
+    }
+
+    function paintCrop() {
+      var job = activeJob();
+      var show = Boolean(job);
+      if (cropBox) cropBox.hidden = !show;
+      if (cropRow) cropRow.hidden = !show;
+      if (!show || !preview) return;
+      requestAnimationFrame(function () {
+        if (!preview.clientWidth || !preview.clientHeight) return;
+        cropBox.style.left = (crop.x * preview.clientWidth) + 'px';
+        cropBox.style.top = (crop.y * preview.clientHeight) + 'px';
+        cropBox.style.width = (crop.w * preview.clientWidth) + 'px';
+        cropBox.style.height = (crop.h * preview.clientHeight) + 'px';
+      });
+    }
+
+    function applyRatio(center) {
+      var r = crop.ratio;
+      if (r === 'free' || !preview || !preview.naturalWidth) { paintCrop(); storeCrop(); return; }
+      var parts = r.split(':');
+      var target = Number(parts[0]) / Number(parts[1]);
+      var iw = preview.naturalWidth;
+      var ih = preview.naturalHeight;
+      var w = crop.w;
+      var h = w * iw / (target * ih);
+      if (h > 0.92) { h = 0.92; w = h * target * ih / iw; }
+      if (center) { crop.x = (1 - w) / 2; crop.y = (1 - h) / 2; }
+      crop.w = w;
+      crop.h = h;
+      crop.x = Math.max(0, Math.min(1 - w, crop.x));
+      crop.y = Math.max(0, Math.min(1 - h, crop.y));
+      paintCrop();
+      storeCrop();
+    }
+
+    function resetCrop() {
+      crop = defaultCrop();
+      crop.ratio = cropRatio ? cropRatio.value : 'free';
+      applyRatio(true);
+    }
+
+    function showJob(index) {
+      if (index < 0 || index >= jobs.length) return;
+      active = index;
+      var job = jobs[active];
+      crop = job.crop || (job.crop = defaultCrop());
+      if (cropRatio) cropRatio.value = crop.ratio || 'free';
+      preview.onload = function () { applyRatio(false); paintCrop(); };
+      preview.src = job.url;
+      preview.hidden = false;
+      renderThumbs();
+      renderStats();
+      paintCrop();
+    }
+
+    function addFiles(files) {
+      var added = 0;
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        if (!file || !file.type || file.type.indexOf('image/') !== 0) continue;
+        jobs.push({
+          file: file,
+          name: file.name || 'photo.' + extFor(file.type),
+          url: URL.createObjectURL(file),
+          blob: null,
+          resultUrl: '',
+          resultType: '',
+          resultBytes: 0,
+          crop: defaultCrop()
+        });
+        added++;
+      }
+      if (!added) {
+        showError(error, 'Нужны файлы JPEG, PNG или WebP.');
+        return;
+      }
       showError(error, '');
-      if (button) { button.disabled = true; button.textContent = 'Сжимаем...'; }
-      resetResult();
-      try {
-        var img = await loadImage(job.file);
-        var max = Number(size ? size.value : 0) || 0;
-        var scale = max > 0 ? Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight)) : 1;
-        var w = Math.max(1, Math.round(img.naturalWidth * scale));
-        var h = Math.max(1, Math.round(img.naturalHeight * scale));
-        var canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        var ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, w, h);
+      invalidateResults();
+      showJob(jobs.length - added);
+      renderControls();
+    }
 
-        var alpha = hasAlpha(ctx, w, h);
-        var requested = format ? format.value : 'image/jpeg';
-        var q = Number(quality ? quality.value : 80) / 100;
-        var types = [requested];
-        if (requested !== 'image/webp') types.push('image/webp');
-        if (alpha && requested !== 'image/png') types.push('image/png');
-        if (!alpha && requested !== 'image/jpeg') types.push('image/jpeg');
+    function removeActive() {
+      var job = activeJob();
+      if (!job) return;
+      resetResult(job);
+      URL.revokeObjectURL(job.url);
+      jobs.splice(active, 1);
+      if (!jobs.length) {
+        active = -1;
+        preview.hidden = true;
+        preview.removeAttribute('src');
+        if (cropBox) cropBox.hidden = true;
+        if (cropRow) cropRow.hidden = true;
+      } else {
+        showJob(Math.min(active, jobs.length - 1));
+      }
+      invalidateResults();
+      renderControls();
+    }
 
-        var best = null;
-        for (var i = 0; i < types.length; i++) {
-          var blob = await encode(canvas, types[i], q);
-          if (blob && (!best || blob.size < best.blob.size)) best = { blob: blob, type: types[i] };
-        }
-        if (!best) throw new Error('Браузер не смог сохранить результат.');
+    function renderThumbs() {
+      if (!thumbs) return;
+      thumbs.innerHTML = '';
+      thumbs.hidden = jobs.length < 2;
+      jobs.forEach(function (job, index) {
+        var node = document.createElement('button');
+        node.className = 'thumb' + (index === active ? ' is-active' : '');
+        node.type = 'button';
+        node.title = job.name;
+        var img = document.createElement('img');
+        img.src = job.url;
+        img.alt = job.name;
+        node.appendChild(img);
+        node.addEventListener('click', function () { showJob(index); });
+        thumbs.appendChild(node);
+      });
+    }
 
-        var smaller = best.blob.size < job.file.size;
-        job.blob = smaller ? best.blob : job.file;
-        job.resultType = smaller ? best.type : (job.file.type || 'image/jpeg');
-        job.url = URL.createObjectURL(job.blob);
-        if (preview) preview.src = job.url;
-        if (after) after.textContent = formatBytes(job.blob.size);
-        if (saving) {
-          var saved = smaller ? Math.max(0, Math.round((1 - job.blob.size / job.file.size) * 100)) : 0;
-          saving.textContent = saved > 0 ? '-' + saved + '%' : '0%';
-        }
-        if (result) {
-          result.classList.add('is-active');
-          var text = result.querySelector('[data-result-text]');
-          if (text) text.textContent = smaller
-            ? 'Файл меньше исходника. Формат результата подобран автоматически.'
-            : 'Уменьшить не получилось, поэтому скачивается исходный файл без изменений.';
-        }
-        if (download) {
-          download.disabled = false;
-          download.textContent = 'Скачать ' + extFor(job.resultType).toUpperCase();
-        }
-      } catch (e) {
-        showError(error, (e && e.message) || 'Не удалось сжать фото.');
-      } finally {
-        if (button) { button.disabled = !job.file; button.textContent = 'Сжать фото'; }
+    function renderStats() {
+      var totalBefore = jobs.reduce(function (sum, job) { return sum + job.file.size; }, 0);
+      var totalAfter = jobs.reduce(function (sum, job) { return sum + (job.resultBytes || job.file.size); }, 0);
+      if (before) before.textContent = totalBefore ? formatBytes(totalBefore) : '-';
+      if (after) after.textContent = totalAfter ? formatBytes(totalAfter) : '-';
+      if (saving) {
+        if (!totalBefore || totalAfter >= totalBefore) saving.textContent = totalBefore ? '0%' : '-';
+        else saving.textContent = '-' + Math.max(0, Math.round((1 - totalAfter / totalBefore) * 100)) + '%';
       }
     }
 
-    input.addEventListener('change', function () { if (input.files && input.files[0]) setFile(input.files[0]); });
+    function renderControls() {
+      var has = jobs.length > 0;
+      if (drop) drop.hidden = has;
+      if (replaceBtn) replaceBtn.hidden = !has;
+      if (addBtn) addBtn.hidden = !has;
+      if (removeBtn) removeBtn.hidden = !has;
+      if (button) {
+        button.disabled = !has;
+        button.textContent = jobs.length > 1 ? 'Сжать все (' + jobs.length + ')' : 'Сжать фото';
+      }
+      if (downloadAll) downloadAll.hidden = jobs.length < 2;
+      renderThumbs();
+      renderStats();
+    }
+
+    async function compressOne(job) {
+      resetResult(job);
+      var img = await loadImage(job.file);
+      var c = job.crop || defaultCrop();
+      var sw = Math.max(1, Math.round(c.w * img.naturalWidth));
+      var sh = Math.max(1, Math.round(c.h * img.naturalHeight));
+      var sx = Math.max(0, Math.min(img.naturalWidth - 1, Math.round(c.x * img.naturalWidth)));
+      var sy = Math.max(0, Math.min(img.naturalHeight - 1, Math.round(c.y * img.naturalHeight)));
+      var max = Number(size ? size.value : 0) || 0;
+      var scale = max > 0 ? Math.min(1, max / Math.max(sw, sh)) : 1;
+      var w = Math.max(1, Math.round(sw * scale));
+      var h = Math.max(1, Math.round(sh * scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+
+      var alpha = hasAlpha(ctx, w, h);
+      var requested = format ? format.value : 'image/jpeg';
+      var q = Number(quality ? quality.value : 80) / 100;
+      var types = [requested];
+      if (requested !== 'image/webp') types.push('image/webp');
+      if (alpha && requested !== 'image/png') types.push('image/png');
+      if (!alpha && requested !== 'image/jpeg') types.push('image/jpeg');
+
+      var best = null;
+      for (var i = 0; i < types.length; i++) {
+        var blob = await encode(canvas, types[i], q);
+        if (blob && (!best || blob.size < best.blob.size)) best = { blob: blob, type: types[i] };
+      }
+      if (!best) throw new Error('Браузер не смог сохранить результат.');
+
+      var smaller = best.blob.size < job.file.size;
+      job.blob = smaller ? best.blob : job.file;
+      job.resultType = smaller ? best.type : (job.file.type || 'image/jpeg');
+      job.resultBytes = job.blob.size;
+      job.resultUrl = URL.createObjectURL(job.blob);
+    }
+
+    async function compress() {
+      if (!jobs.length) return;
+      showError(error, '');
+      if (button) button.disabled = true;
+      invalidateResults();
+      var done = 0;
+      try {
+        for (var i = 0; i < jobs.length; i++) {
+          if (button) button.textContent = 'Сжимаем... ' + (i + 1) + ' / ' + jobs.length;
+          await compressOne(jobs[i]);
+          done++;
+        }
+        renderStats();
+        if (result) {
+          result.classList.add('is-active');
+          var text = result.querySelector('[data-result-text]');
+          if (text) {
+            text.textContent = done > 1
+              ? 'Готово ' + done + ' фото. Кадр учтён, формат результата подобран автоматически.'
+              : 'Кадр учтён, формат результата подобран автоматически.';
+          }
+        }
+        if (download) download.disabled = !activeJob() || !activeJob().blob;
+        if (downloadAll) downloadAll.disabled = jobs.some(function (job) { return !job.blob; });
+      } catch (e) {
+        showError(error, (e && e.message) || 'Не удалось сжать фото.');
+      } finally {
+        renderControls();
+        if (download) download.disabled = !activeJob() || !activeJob().blob;
+        if (downloadAll) downloadAll.disabled = jobs.some(function (job) { return !job.blob; });
+      }
+    }
+
+    function downloadJob(job) {
+      if (!job || !job.blob) return;
+      var base = job.name.replace(/\.[^.]+$/, '');
+      downloadBlob(job.blob, base + '-vidslice.' + extFor(job.resultType));
+    }
+
+    input.addEventListener('change', function () {
+      if (input.files && input.files.length) addFiles(Array.prototype.slice.call(input.files));
+      input.value = '';
+    });
     if (button) button.addEventListener('click', compress);
     if (quality) quality.addEventListener('input', function () {
       if (qualityValue) qualityValue.textContent = quality.value + '%';
+      invalidateResults();
     });
-    if (download) download.addEventListener('click', function () {
-      if (!job.blob) return;
-      var base = job.name.replace(/\.[^.]+$/, '');
-      downloadBlob(job.blob, base + '-optimized.' + extFor(job.resultType));
+    if (format) format.addEventListener('change', invalidateResults);
+    if (size) size.addEventListener('change', invalidateResults);
+    if (download) download.addEventListener('click', function () { downloadJob(activeJob()); });
+    if (downloadAll) downloadAll.addEventListener('click', function () {
+      jobs.forEach(function (job, index) {
+        if (!job.blob) return;
+        setTimeout(function () { downloadJob(job); }, index * 260);
+      });
     });
+    if (replaceBtn) replaceBtn.addEventListener('click', picker.open);
+    if (addBtn) addBtn.addEventListener('click', picker.open);
+    if (removeBtn) removeBtn.addEventListener('click', removeActive);
 
     if (drop) {
-      drop.addEventListener('click', function () { input.click(); });
+      drop.addEventListener('click', function () { picker.open(); });
       ['dragenter', 'dragover'].forEach(function (type) {
         drop.addEventListener(type, function (e) { e.preventDefault(); drop.classList.add('is-over'); });
       });
@@ -293,9 +587,77 @@
         drop.addEventListener(type, function (e) { e.preventDefault(); drop.classList.remove('is-over'); });
       });
       drop.addEventListener('drop', function (e) {
-        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+        if (e.dataTransfer && e.dataTransfer.files) addFiles(Array.prototype.slice.call(e.dataTransfer.files));
       });
     }
+
+    if (cropRatio) cropRatio.addEventListener('change', function () {
+      crop.ratio = cropRatio.value;
+      applyRatio(true);
+      invalidateResults();
+    });
+    if (cropReset) cropReset.addEventListener('click', function () { resetCrop(); invalidateResults(); });
+
+    if (cropBox && cropHandle) {
+      cropBox.addEventListener('pointerdown', function (e) {
+        if (e.target === cropHandle) return;
+        startDrag(e, false);
+      });
+      cropHandle.addEventListener('pointerdown', function (e) {
+        e.stopPropagation();
+        startDrag(e, true);
+      });
+    }
+
+    function startDrag(e, resize) {
+      if (!activeJob() || !preview) return;
+      e.preventDefault();
+      drag = {
+        resize: resize,
+        x: e.clientX,
+        y: e.clientY,
+        crop: { x: crop.x, y: crop.y, w: crop.w, h: crop.h }
+      };
+      window.addEventListener('pointermove', onDrag);
+      window.addEventListener('pointerup', endDrag, { once: true });
+    }
+
+    function onDrag(e) {
+      if (!drag || !preview || !preview.clientWidth) return;
+      var dx = (e.clientX - drag.x) / preview.clientWidth;
+      var dy = (e.clientY - drag.y) / preview.clientHeight;
+      if (drag.resize) {
+        var w = Math.max(0.1, Math.min(1 - drag.crop.x, drag.crop.w + dx));
+        var h;
+        if (crop.ratio !== 'free') {
+          var parts = crop.ratio.split(':');
+          var target = Number(parts[0]) / Number(parts[1]);
+          h = w * preview.naturalWidth / (target * preview.naturalHeight);
+          if (drag.crop.y + h > 1) {
+            h = 1 - drag.crop.y;
+            w = h * target * preview.naturalHeight / preview.naturalWidth;
+          }
+        } else {
+          h = Math.max(0.1, Math.min(1 - drag.crop.y, drag.crop.h + dy));
+        }
+        crop.w = w;
+        crop.h = h;
+      } else {
+        crop.x = Math.max(0, Math.min(1 - drag.crop.w, drag.crop.x + dx));
+        crop.y = Math.max(0, Math.min(1 - drag.crop.h, drag.crop.y + dy));
+      }
+      paintCrop();
+      storeCrop();
+    }
+
+    function endDrag() {
+      if (!drag) return;
+      drag = null;
+      window.removeEventListener('pointermove', onDrag);
+      invalidateResults();
+    }
+
+    renderControls();
   }
 
   /* ---------- video engine and editor ---------- */
@@ -324,7 +686,19 @@
     var trimRangeText = $('trimRangeText');
     var trimStartLabel = $('trimStartLabel');
     var trimEndLabel = $('trimEndLabel');
+    var fragmentHead = $('videoFragmentHead');
+    var fragmentRange = $('videoFragmentRange');
+    var replaceBtn = $('videoReplace');
     if (!input) return;
+
+    var picker = makePicker({
+      id: 'videoPicker',
+      title: 'Загрузить видео',
+      hint: 'MP4, MOV, WebM, MKV или другой формат, который открывает браузер',
+      accept: 'video/*',
+      multiple: false,
+      onFiles: function (files) { setFile(files[0]); }
+    });
 
     var CORE_URL = new URL('vendor/ffmpeg/ffmpeg-core.js', document.baseURI).href;
     var WASM_GZ_URL = new URL('vendor/ffmpeg/ffmpeg-core.wasm.gz', document.baseURI).href;
@@ -360,6 +734,10 @@
       if (startValue) startValue.textContent = formatTime(a);
       if (endValue) endValue.textContent = formatTime(b);
       if (trimRangeText) trimRangeText.textContent = formatTime(a) + ' - ' + formatTime(b);
+      if (fragmentRange) fragmentRange.textContent = formatTime(a) + ' - ' + formatTime(b);
+      if (video && isFinite(video.duration) && (video.currentTime < a - 0.05 || video.currentTime > b + 0.05)) {
+        try { video.currentTime = a; } catch (e) { /* ignore */ }
+      }
 
       if (trimBand && duration > 0) {
         var startPct = Math.max(0, Math.min(100, (a / duration) * 100));
@@ -395,10 +773,9 @@
         video.src = sourceUrl;
       }
       if (name) name.textContent = next.name;
-      if (drop) {
-        var label = drop.querySelector('[data-drop-label]');
-        if (label) label.textContent = 'Заменить видео: ' + next.name;
-      }
+      if (drop) drop.hidden = true;
+      if (replaceBtn) replaceBtn.hidden = false;
+      if (fragmentHead) fragmentHead.hidden = false;
       if (result) result.classList.remove('is-active');
       if (download) download.disabled = true;
       if (exportBtn) exportBtn.disabled = false;
@@ -566,7 +943,10 @@
       }
     }
 
-    input.addEventListener('change', function () { if (input.files && input.files[0]) setFile(input.files[0]); });
+    input.addEventListener('change', function () {
+      if (input.files && input.files[0]) setFile(input.files[0]);
+      input.value = '';
+    });
     if (video) video.addEventListener('loadedmetadata', function () {
       duration = video.duration || 0;
       if (durationNode) durationNode.textContent = formatTime(duration);
@@ -579,6 +959,17 @@
       if (endSlider) endSlider.value = duration;
       updateTrim();
     });
+    if (video) video.addEventListener('timeupdate', function () {
+      if (!file || !isFinite(video.duration)) return;
+      var a = Number(startSlider.value);
+      var b = Number(endSlider.value);
+      if (video.currentTime > b - 0.02) {
+        video.pause();
+        try { video.currentTime = a; } catch (e) { /* ignore */ }
+      } else if (video.currentTime < a - 0.12) {
+        try { video.currentTime = a; } catch (e) { /* ignore */ }
+      }
+    });
     [startSlider, endSlider].forEach(function (slider) { if (slider) slider.addEventListener('input', updateTrim); });
     if (exportBtn) exportBtn.addEventListener('click', exportVideo);
     if (download) download.addEventListener('click', function () {
@@ -587,8 +978,10 @@
       downloadBlob(outputBlob, base + '-vidslice.mp4');
     });
 
+    if (replaceBtn) replaceBtn.addEventListener('click', picker.open);
+
     if (drop) {
-      drop.addEventListener('click', function () { input.click(); });
+      drop.addEventListener('click', picker.open);
       ['dragenter', 'dragover'].forEach(function (type) {
         drop.addEventListener(type, function (e) { e.preventDefault(); drop.classList.add('is-over'); });
       });
@@ -599,6 +992,20 @@
         if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
       });
     }
+
+    var fullLink = document.querySelector('[data-full-editor]');
+    if (fullLink) fullLink.addEventListener('click', function (e) {
+      if (!file) return;
+      e.preventDefault();
+      var href = fullLink.getAttribute('href');
+      saveHandoff({
+        blob: file,
+        name: file.name || 'video.mp4',
+        type: file.type || 'video/mp4',
+        start: Number(startSlider.value),
+        end: Number(endSlider.value)
+      }).then(function () { location.href = href; }, function () { location.href = href; });
+    });
   }
 
   /* ---------- theme and account ---------- */
@@ -729,6 +1136,7 @@
   function init() {
     updateDotColor();
     initCursorField();
+    initCardTilt();
     initTheme();
     initAccount();
     var page = document.body.dataset.page;
