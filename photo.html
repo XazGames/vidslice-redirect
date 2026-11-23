@@ -12,8 +12,8 @@
     } catch (error) { }
   </script>
   <link rel="icon" href="assets/img/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="assets/css/app.css?v=20261123g7">
-  <script src="assets/js/app.js?v=20261123g7" defer></script>
+  <link rel="stylesheet" href="assets/css/app.css?v=20261123g8">
+  <script src="assets/js/app.js?v=20261123g8" defer></script>
 </head>
 <body data-page="photo">
   <div class="cursor-glow" aria-hidden="true"></div>
@@ -38,7 +38,7 @@
     <div class="tool">
       <section class="panel panel--stage">
         <h1 class="panel__title">Фото</h1>
-        <p class="panel__hint">Можно загрузить несколько фото сразу. Кадр можно подвинуть и изменить его размер - сжатие будет применено к выделенной области.</p>
+        <p class="panel__hint">Можно загрузить несколько фото сразу. По умолчанию сохраняется исходный кадр; кнопка «Квадрат» обрезает только текущее фото.</p>
 
         <div class="photo-stage" id="photoStage">
           <img id="photoPreview" class="preview" alt="Предпросмотр фото" hidden>
@@ -59,6 +59,7 @@
               <option value="9:16">9:16</option>
             </select>
           </div>
+          <button class="btn" id="photoSquare" type="button">Квадрат 1:1</button>
           <button class="btn" id="photoCropReset" type="button">Сбросить кадр</button>
         </div>
 
