@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="assets/css/mobile-sheets.css?v=20261123m4">
   <link rel="stylesheet" href="assets/css/site-decor.css?v=20261123d8">
   <script src="vendor/ffmpeg/ffmpeg.js" defer></script>
-  <script src="assets/js/app.js?v=20261123g17" defer></script>
+  <script src="assets/js/app.js?v=20261123g18" defer></script>
   <script src="assets/js/mobile-sheets.js?v=20261123m4" defer></script>
   <script src="assets/js/site-decor.js?v=20261123d8" defer></script>
 </head>
@@ -113,6 +113,17 @@
         <div class="field">
           <label for="trimEnd">Конец <b id="endValue">00:00.00</b></label>
           <input id="trimEnd" type="range" min="0" max="1" step="0.01" value="1">
+        </div>
+
+        <div class="field">
+          <label for="exportMode">Режим экспорта</label>
+          <select id="exportMode">
+            <option value="optimal">Оптимальный</option>
+            <option value="fast">Максимально быстро</option>
+            <option value="quality">Лучшее качество</option>
+            <option value="manual">Вручную</option>
+          </select>
+          <p class="panel__hint">Оптимальный сам выбирает скорость и качество.</p>
         </div>
 
         <div class="field">
