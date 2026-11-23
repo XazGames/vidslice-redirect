@@ -118,7 +118,15 @@
     endInput.dispatchEvent(new Event('change', { bubbles: true }));
     startInput.value = formatTime(start);
     startInput.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
+
+    var handleStart = document.getElementById('handleStart');
+    var handleEnd = document.getElementById('handleEnd');
+    if (handleStart && handleEnd) {
+      var sNow = Number(handleStart.getAttribute('aria-valuenow'));
+      var eNow = Number(handleEnd.getAttribute('aria-valuenow'));
+      if (isFinite(sNow) && isFinite(eNow) && Math.abs(sNow - start) < 0.02 && Math.abs(eNow - end) < 0.02) return true;
+    }
+    return false;
   }
 
   function inject(data) {
@@ -138,7 +146,7 @@
         vsToast('Видео перенесено', 'Границы обрезки сохранены');
         return;
       }
-      if (++attempts < 180) requestAnimationFrame(wait);
+      if (++attempts < 60) setTimeout(wait, 250);
       else handoffActive = false;
     })();
   }
