@@ -446,7 +446,10 @@
           radius = d.r + 1.8 + pull * 2.4;
           alpha = 0.45 + pull * 0.5;
         } else {
-          var released = d.captured > 0.01 || Math.abs(d.ox) > 0.2 || Math.abs(d.oy) > 0.2 || Math.abs(d.vx) > 0.2 || Math.abs(d.vy) > 0.2;
+          var pull = hover * hover * 26;
+          var hoverX = (dx / dist) * pull;
+          var hoverY = (dy / dist) * pull;
+          var released = d.captured > 0.01 || Math.abs(d.ox) > 0.6 || Math.abs(d.oy) > 0.6 || Math.abs(d.vx) > 1.5 || Math.abs(d.vy) > 1.5;
           if (released) {
             d.captured = Math.max(0, d.captured - dtSec * 2.2);
             var spring = d.captured > 0 ? 20 : 44;
@@ -457,17 +460,13 @@
             d.vy *= damping;
             d.ox += d.vx * dtSec;
             d.oy += d.vy * dtSec;
-            if (d.captured <= 0.01 && Math.abs(d.ox) < 0.18 && Math.abs(d.oy) < 0.18 && Math.abs(d.vx) < 0.18 && Math.abs(d.vy) < 0.18) {
+            if (d.captured <= 0.01 && Math.abs(d.ox) < 0.6 && Math.abs(d.oy) < 0.6 && Math.abs(d.vx) < 1.5 && Math.abs(d.vy) < 1.5) {
               d.ox = 0; d.oy = 0; d.vx = 0; d.vy = 0; d.captured = 0;
             }
-          } else {
-            var pull = hover * hover * 26;
-            px = homeX + (dx / dist) * pull;
-            py = homeY + (dy / dist) * pull;
           }
+          px = homeX + d.ox + hoverX;
+          py = homeY + d.oy + hoverY;
           if (d.ox || d.oy) {
-            px = homeX + d.ox;
-            py = homeY + d.oy;
             radius = d.r + 0.8 + Math.min(2.2, Math.sqrt(d.vx * d.vx + d.vy * d.vy) / 140);
             alpha = 0.28 + Math.min(0.55, Math.sqrt(d.ox * d.ox + d.oy * d.oy) / 80);
           }
